@@ -1,0 +1,24 @@
+[Unit]
+Description=VPN Telegram Bot (3x-ui + ЮKassa)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/vpn-bot
+EnvironmentFile=/opt/vpn-bot/.env
+ExecStart=/opt/vpn-bot/.venv/bin/python -m src.main
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+# Простая защита процесса
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/vpn-bot/data
+
+[Install]
+WantedBy=multi-user.target
