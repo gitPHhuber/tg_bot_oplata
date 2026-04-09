@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from .. import messages
+from ..config import settings
 from ..db import DB
 from ..keyboards import main_menu_kb
 
@@ -20,9 +21,10 @@ async def cmd_start(msg: Message, state: FSMContext, db: DB) -> None:
         first_name=msg.from_user.first_name,
     )
     name = msg.from_user.first_name or msg.from_user.username or "друг"
+    is_admin = settings.is_admin(msg.from_user.id)
     await msg.answer(
         messages.WELCOME.format(name=name),
-        reply_markup=main_menu_kb(),
+        reply_markup=main_menu_kb(is_admin=is_admin),
     )
 
 

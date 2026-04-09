@@ -15,6 +15,12 @@ MENU_PROFILE = "👤 Моя подписка"
 MENU_HOWTO = "📲 Как подключиться"
 MENU_SUPPORT = "💬 Поддержка"
 
+# админский ряд (виден только админам)
+MENU_ADMIN_PANEL = "🛠 Админ-панель"
+MENU_ADMIN_STATS = "📊 Stats"
+MENU_ADMIN_SUBS = "🔐 Subs"
+MENU_ADMIN_USERS = "👥 Users"
+
 TARIFF_LIST_HEADER = "Выбери тариф:"
 
 PROFILE_NONE = (

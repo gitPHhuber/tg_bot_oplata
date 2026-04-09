@@ -10,16 +10,28 @@ from . import messages
 from .tariffs import TARIFFS, Tariff
 
 
-def main_menu_kb() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=messages.MENU_BUY)],
-            [
-                KeyboardButton(text=messages.MENU_PROFILE),
-                KeyboardButton(text=messages.MENU_HOWTO),
-            ],
-            [KeyboardButton(text=messages.MENU_SUPPORT)],
+def main_menu_kb(is_admin: bool = False) -> ReplyKeyboardMarkup:
+    """Главное меню. Админу показываем дополнительный ряд с быстрыми действиями
+    + кнопкой 🛠 Админ-панель, открывающей inline-меню."""
+    rows: list[list[KeyboardButton]] = [
+        [KeyboardButton(text=messages.MENU_BUY)],
+        [
+            KeyboardButton(text=messages.MENU_PROFILE),
+            KeyboardButton(text=messages.MENU_HOWTO),
         ],
+        [KeyboardButton(text=messages.MENU_SUPPORT)],
+    ]
+    if is_admin:
+        rows.append(
+            [
+                KeyboardButton(text=messages.MENU_ADMIN_STATS),
+                KeyboardButton(text=messages.MENU_ADMIN_USERS),
+                KeyboardButton(text=messages.MENU_ADMIN_SUBS),
+            ]
+        )
+        rows.append([KeyboardButton(text=messages.MENU_ADMIN_PANEL)])
+    return ReplyKeyboardMarkup(
+        keyboard=rows,
         resize_keyboard=True,
     )
 

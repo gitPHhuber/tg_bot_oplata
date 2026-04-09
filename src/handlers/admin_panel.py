@@ -25,6 +25,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
+from .. import messages
 from ..config import settings
 from ..db import DB
 from ..keyboards import (
@@ -86,6 +87,66 @@ router.callback_query.filter(IsAdmin())
 async def cmd_admin(msg: Message, state: FSMContext) -> None:
     await state.clear()
     await msg.answer("🛠 <b>Админ-панель</b>", reply_markup=admin_main_kb())
+
+
+# Кнопки reply-клавиатуры админа (см. keyboards.main_menu_kb)
+@router.message(F.text == messages.MENU_ADMIN_PANEL)
+async def menu_admin_panel(msg: Message, state: FSMContext) -> None:
+    await state.clear()
+    await msg.answer("🛠 <b>Админ-панель</b>", reply_markup=admin_main_kb())
+
+
+@router.message(F.text == messages.MENU_ADMIN_STATS)
+async def menu_admin_stats(msg: Message) -> None:
+    await msg.answer(
+        "📊 <b>Статистика</b>\n\nВыбери период:",
+        reply_markup=admin_stats_period_kb(),
+    )
+
+
+@router.message(F.text == messages.MENU_ADMIN_USERS)
+async def menu_admin_users(msg: Message, db: DB) -> None:
+    total = await db.count_users()
+    total_pages = max((total + USERS_PER_PAGE - 1) // USERS_PER_PAGE, 1)
+    rows = await db.get_users_page(USERS_PER_PAGE, 0)
+    if not rows:
+        txt = "👥 <b>Users</b>\n\nПусто."
+    else:
+        lines = [f"👥 <b>Users</b> ({total})\n"]
+        for tg_id, username, first_name, _ in rows:
+            uname = f"@{username}" if username else "—"
+            name = first_name or "?"
+            lines.append(f"<code>{tg_id}</code> · {name} · {uname}")
+        lines.append("\n<i>Тапни /u_&lt;tg_id&gt; чтобы открыть карточку.</i>")
+        txt = "\n".join(lines)
+    await msg.answer(txt, reply_markup=admin_paginator_kb("adm:users", 0, total_pages))
+
+
+@router.message(F.text == messages.MENU_ADMIN_SUBS)
+async def menu_admin_subs(msg: Message, db: DB, xui: XUIClient) -> None:
+    total = await db.count_active_subscriptions()
+    total_pages = max((total + SUBS_PER_PAGE - 1) // SUBS_PER_PAGE, 1)
+    subs = await db.list_active_subscriptions(SUBS_PER_PAGE, 0)
+    stats = await xui.get_inbound_client_stats(settings.xui_inbound_id)
+    by_email = {s.get("email"): s for s in stats}
+    if not subs:
+        txt = "🔐 <b>Active subs</b>\n\nПусто."
+    else:
+        lines = [f"🔐 <b>Active subs</b> ({total})\n"]
+        for s in subs:
+            cs = by_email.get(s.xui_email) or {}
+            up = cs.get("up", 0) or 0
+            down = cs.get("down", 0) or 0
+            tariff = get_tariff(s.tariff_code)
+            ttl = tariff.title if tariff else s.tariff_code
+            limit = format_traffic(s.traffic_gb)
+            lines.append(
+                f"#{s.id} <code>{s.tg_id}</code>\n"
+                f"  {ttl} · {limit} · до {s.expires_at[:10]}\n"
+                f"  ⬆️ {format_used(up)} ⬇️ {format_used(down)} · Σ {format_used(up + down)}"
+            )
+        txt = "\n\n".join(lines)
+    await msg.answer(txt, reply_markup=admin_paginator_kb("adm:subs", 0, total_pages))
 
 
 @router.callback_query(F.data == "adm:home")
