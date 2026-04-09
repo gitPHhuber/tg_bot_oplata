@@ -57,6 +57,26 @@ CREATE TABLE IF NOT EXISTS support_threads (
     PRIMARY KEY (admin_chat_id, admin_msg_id)
 );
 CREATE INDEX IF NOT EXISTS idx_support_user ON support_threads(user_tg_id);
+
+CREATE TABLE IF NOT EXISTS promocodes (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    code         TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    kind         TEXT NOT NULL,            -- 'percent' | 'fixed'
+    value        INTEGER NOT NULL,          -- 5..100 для percent / рубли для fixed
+    max_uses     INTEGER NOT NULL DEFAULT 0,-- 0 = безлимитно
+    used_count   INTEGER NOT NULL DEFAULT 0,
+    expires_at   TEXT,                      -- NULL = бессрочно
+    created_at   TEXT NOT NULL,
+    enabled      INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS promocode_uses (
+    promo_id   INTEGER NOT NULL,
+    tg_id      INTEGER NOT NULL,
+    used_at    TEXT NOT NULL,
+    PRIMARY KEY (promo_id, tg_id),
+    FOREIGN KEY (promo_id) REFERENCES promocodes(id)
+);
 """
 
 
@@ -100,6 +120,7 @@ class Payment:
     created_at: str
     updated_at: str
     sub_id: Optional[int]
+    promo_id: Optional[int] = None
 
 
 class DB:
@@ -128,6 +149,15 @@ class DB:
         cols = {row[1] for row in await cur.fetchall()}
         if "referrer_id" not in cols:
             await conn.execute("ALTER TABLE users ADD COLUMN referrer_id INTEGER")
+        if "trial_used" not in cols:
+            await conn.execute(
+                "ALTER TABLE users ADD COLUMN trial_used INTEGER NOT NULL DEFAULT 0"
+            )
+        # payments.promo_id для отложенного списания промо-использования
+        cur2 = await conn.execute("PRAGMA table_info(payments)")
+        pcols = {row[1] for row in await cur2.fetchall()}
+        if "promo_id" not in pcols:
+            await conn.execute("ALTER TABLE payments ADD COLUMN promo_id INTEGER")
         # индекс создаём ПОСЛЕ ALTER, чтобы он не падал на пустой схеме
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_users_referrer ON users(referrer_id)"
@@ -248,6 +278,78 @@ class DB:
             row = await cur.fetchone()
             return row[0] if row else 0
 
+    # ---------- trial ----------
+    async def is_trial_available(self, tg_id: int) -> bool:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT trial_used FROM users WHERE tg_id = ?", (tg_id,)
+            )
+            row = await cur.fetchone()
+            return bool(row) and (row[0] or 0) == 0
+
+    async def mark_trial_used(self, tg_id: int) -> None:
+        async with aiosqlite.connect(self.path) as conn:
+            await conn.execute(
+                "UPDATE users SET trial_used = 1 WHERE tg_id = ?", (tg_id,)
+            )
+            await conn.commit()
+
+    # ---------- promocodes ----------
+    async def create_promocode(
+        self,
+        code: str,
+        kind: str,           # 'percent' | 'fixed'
+        value: int,
+        max_uses: int = 0,
+        expires_at: Optional[str] = None,
+    ) -> int:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                """INSERT INTO promocodes
+                   (code, kind, value, max_uses, used_count, expires_at, created_at, enabled)
+                   VALUES (?, ?, ?, ?, 0, ?, ?, 1)""",
+                (code.upper(), kind, value, max_uses, expires_at, now_iso()),
+            )
+            await conn.commit()
+            return cur.lastrowid or 0
+
+    async def get_promocode(self, code: str) -> Optional[tuple]:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                """SELECT id, code, kind, value, max_uses, used_count, expires_at, enabled
+                   FROM promocodes WHERE code = ? COLLATE NOCASE""",
+                (code,),
+            )
+            row = await cur.fetchone()
+            return tuple(row) if row else None
+
+    async def is_promo_used_by(self, promo_id: int, tg_id: int) -> bool:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT 1 FROM promocode_uses WHERE promo_id = ? AND tg_id = ?",
+                (promo_id, tg_id),
+            )
+            return await cur.fetchone() is not None
+
+    async def use_promocode(self, promo_id: int, tg_id: int) -> None:
+        async with aiosqlite.connect(self.path) as conn:
+            await conn.execute(
+                "INSERT OR IGNORE INTO promocode_uses (promo_id, tg_id, used_at) VALUES (?, ?, ?)",
+                (promo_id, tg_id, now_iso()),
+            )
+            await conn.execute(
+                "UPDATE promocodes SET used_count = used_count + 1 WHERE id = ?",
+                (promo_id,),
+            )
+            await conn.commit()
+
+    async def list_promocodes(self) -> list[tuple]:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT id, code, kind, value, max_uses, used_count, expires_at, enabled FROM promocodes ORDER BY id DESC"
+            )
+            return [tuple(r) for r in await cur.fetchall()]
+
     async def is_first_activation(self, tg_id: int) -> bool:
         """True, если у юзера ещё нет ни одной активации (любого типа). Используется
         для триггера реферального бонуса — должен вызываться ДО create_payment."""
@@ -361,13 +463,14 @@ class DB:
         tariff_code: str,
         amount_rub: int,
         status: str,
+        promo_id: Optional[int] = None,
     ) -> int:
         async with aiosqlite.connect(self.path) as conn:
             cur = await conn.execute(
                 """INSERT INTO payments
-                   (tg_id, yk_id, tariff_code, amount_rub, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (tg_id, yk_id, tariff_code, amount_rub, status, now_iso(), now_iso()),
+                   (tg_id, yk_id, tariff_code, amount_rub, status, created_at, updated_at, promo_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (tg_id, yk_id, tariff_code, amount_rub, status, now_iso(), now_iso(), promo_id),
             )
             await conn.commit()
             return cur.lastrowid or 0
@@ -463,4 +566,5 @@ def _row_to_pay(row) -> Payment:
         created_at=row[6],
         updated_at=row[7],
         sub_id=row[8],
+        promo_id=row[9] if len(row) > 9 else None,
     )

@@ -1,7 +1,7 @@
 import logging
 
 from aiogram import F, Router
-from aiogram.filters import CommandObject, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -10,10 +10,15 @@ from ..config import settings
 from ..db import DB
 from ..keyboards import (
     about_kb,
+    admin_reply_kb,
     main_inline_back_kb,
     main_inline_kb,
-    main_menu_kb,
     offer_kb,
+)
+from ..services import (
+    activate_gift_subscription,
+    format_dt_human,
+    process_referral_after_activation,
 )
 
 log = logging.getLogger(__name__)
@@ -58,16 +63,66 @@ async def cmd_start(
 
     name = msg.from_user.first_name or msg.from_user.username or "друг"
     is_admin = settings.is_admin(msg.from_user.id)
-    # Reply-клавиатура — для быстрого доступа (особенно админу)
-    await msg.answer(
-        messages.WELCOME.format(name=name),
-        reply_markup=main_menu_kb(is_admin=is_admin),
-    )
+    users_count = await db.count_users()
+    trial_ok = await db.is_trial_available(msg.from_user.id)
+
+    # Reply-клавиатура — только для админа (юзеры идут чисто через inline)
+    if is_admin:
+        await msg.answer(
+            messages.WELCOME.format(name=name, users_count=users_count),
+            reply_markup=admin_reply_kb(),
+        )
+    else:
+        await msg.answer(
+            messages.WELCOME.format(name=name, users_count=users_count),
+        )
+        if trial_ok:
+            await msg.answer(messages.WELCOME_NEW_USER_HINT)
+
     # Inline главное меню — основной интерфейс
     await msg.answer(
         "Выбери действие 👇",
-        reply_markup=main_inline_kb(channel_url=settings.channel_url),
+        reply_markup=main_inline_kb(
+            channel_url=settings.channel_url,
+            show_trial=trial_ok,
+        ),
     )
+
+
+# ===== Free trial =====
+
+@router.callback_query(F.data == "m:trial")
+async def cb_trial(cq: CallbackQuery, db: DB, xui, bot) -> None:
+    if not await db.is_trial_available(cq.from_user.id):
+        await cq.answer(messages.TRIAL_OFFERED_ALREADY, show_alert=True)
+        return
+    try:
+        sub, link = await activate_gift_subscription(
+            db, xui, cq.from_user.id, days=3, traffic_gb=0
+        )
+    except Exception as e:
+        log.exception("trial activation failed")
+        await cq.answer(f"Ошибка: {e}", show_alert=True)
+        return
+    await db.mark_trial_used(cq.from_user.id)
+    # Записать как manual-платёж 0₽ для статистики/реферальной механики
+    await db.create_payment(
+        tg_id=cq.from_user.id,
+        yk_id=None,
+        tariff_code=sub.tariff_code,
+        amount_rub=0,
+        status="manual",
+    )
+    # Триггер реферального бонуса (это первая активация)
+    await process_referral_after_activation(db, xui, bot, cq.from_user.id)
+    text = messages.TRIAL_GRANTED.format(
+        expires=format_dt_human(sub.expires_at), link=link
+    )
+    try:
+        await cq.message.edit_text(text, reply_markup=main_inline_back_kb())
+    except Exception:
+        await cq.message.answer(text, reply_markup=main_inline_back_kb())
+    await cq.answer("Подписка активирована 🎉")
 
 
 # ===== inline-меню роутинг =====
@@ -124,19 +179,48 @@ async def cb_offer(cq: CallbackQuery) -> None:
     await cq.answer()
 
 
+HELP_TEXT = (
+    "🆘 <b>Помощь</b>\n\n"
+    "• «🔐 Моя подписка» — ключ, срок и трафик\n"
+    "• «📲 Как подключиться» — пошаговая инструкция\n"
+    "• «🛒 Купить подписку» — тарифы и оплата\n"
+    "• «🤝 Реферальная программа» — приглашай друзей и получай дни в подарок\n\n"
+    "Не работает ключ или есть вопрос — напиши нам через раздел поддержки в боте."
+)
+
+
 @router.callback_query(F.data == "m:help")
 async def cb_help(cq: CallbackQuery) -> None:
-    text = (
-        "🆘 <b>Помощь</b>\n\n"
-        "• Выбери в меню «🔐 Моя подписка» — там твой ключ и срок\n"
-        "• «📲 Как подключиться» — пошаговая инструкция\n"
-        "• Не работает ключ или хочешь задать вопрос — нажми кнопку поддержки на reply-клавиатуре"
-    )
     try:
-        await cq.message.edit_text(text, reply_markup=main_inline_back_kb())
+        await cq.message.edit_text(HELP_TEXT, reply_markup=main_inline_back_kb())
     except Exception:
-        await cq.message.answer(text, reply_markup=main_inline_back_kb())
+        await cq.message.answer(HELP_TEXT, reply_markup=main_inline_back_kb())
     await cq.answer()
+
+
+# Алиасы для команд из меню @BotFather (/setcommands)
+@router.message(Command("help"))
+async def cmd_help(msg: Message) -> None:
+    await msg.answer(HELP_TEXT, reply_markup=main_inline_back_kb())
+
+
+@router.message(Command("buy"))
+async def cmd_buy(msg: Message) -> None:
+    # Просто эмулируем кнопку «Купить подписку»
+    await msg.answer(
+        "🛒 Открой главное меню и нажми «Купить подписку».\n"
+        "Или просто отправь /start.",
+        reply_markup=main_inline_back_kb(),
+    )
+
+
+@router.message(Command("profile"))
+async def cmd_profile(msg: Message) -> None:
+    await msg.answer(
+        "🔐 Открой главное меню и нажми «Моя подписка».\n"
+        "Или просто отправь /start.",
+        reply_markup=main_inline_back_kb(),
+    )
 
 
 # ----- старые reply-кнопки (оставлены, чтобы работало и текстом) -----

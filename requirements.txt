@@ -6,3 +6,4 @@ pydantic-settings>=2.5
 APScheduler>=3.10,<4
 yookassa>=3.5
 python-dotenv>=1.0
+qrcode[pil]>=7.4

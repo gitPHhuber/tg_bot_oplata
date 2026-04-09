@@ -25,6 +25,87 @@ def _is_admin(msg: Message) -> bool:
 # быстрый доступ из любого места без открытия меню.
 
 
+@router.message(Command("promo"))
+async def cmd_promo(msg: Message, command: CommandObject, db: DB) -> None:
+    """/promo создать <КОД> percent|fixed <значение> [max_uses=0] [days=0]
+    /promo list — список всех промокодов
+    /promo del <КОД> — отключить (через update enabled=0 — пока не реализовано, удалять можно вручную)
+    """
+    if not _is_admin(msg):
+        await msg.answer(messages.ADMIN_ONLY)
+        return
+    if not command.args:
+        await msg.answer(
+            "<b>Промокоды</b>\n\n"
+            "• Создать: <code>/promo create CODE percent 20 100 30</code>\n"
+            "  (CODE, тип, значение, max_uses=100, истекает через 30 дней)\n"
+            "  Можно опустить max_uses (=0=безлимит) и days (=0=бессрочно).\n"
+            "• Тип: <code>percent</code> (1..100) или <code>fixed</code> (рубли)\n"
+            "• Список: <code>/promo list</code>\n\n"
+            "Пример:\n"
+            "<code>/promo create WELCOME percent 20</code>\n"
+            "<code>/promo create FIRST50 fixed 50 100 7</code>"
+        )
+        return
+    parts = command.args.split()
+    sub = parts[0].lower()
+    if sub == "list":
+        rows = await db.list_promocodes()
+        if not rows:
+            await msg.answer("Промокодов нет.")
+            return
+        lines = ["<b>Промокоды</b>\n"]
+        for r in rows:
+            (pid, code, kind, value, max_uses, used_count, exp, enabled) = r
+            disp = f"-{value}%" if kind == "percent" else f"-{value}₽"
+            limit = "∞" if not max_uses else f"{used_count}/{max_uses}"
+            exp_str = f", до {exp[:10]}" if exp else ""
+            on = "✅" if enabled else "❌"
+            lines.append(f"{on} <code>{code}</code> · {disp} · {limit}{exp_str}")
+        await msg.answer("\n".join(lines))
+        return
+    if sub == "create":
+        if len(parts) < 4:
+            await msg.answer(
+                "Формат: <code>/promo create CODE percent|fixed VALUE [max_uses] [days]</code>"
+            )
+            return
+        code = parts[1]
+        kind = parts[2].lower()
+        if kind not in ("percent", "fixed"):
+            await msg.answer("Тип должен быть <code>percent</code> или <code>fixed</code>")
+            return
+        try:
+            value = int(parts[3])
+        except ValueError:
+            await msg.answer("VALUE должно быть числом")
+            return
+        max_uses = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0
+        days = int(parts[5]) if len(parts) > 5 and parts[5].isdigit() else 0
+        from datetime import datetime, timedelta, timezone
+        expires_at = (
+            (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+            if days
+            else None
+        )
+        try:
+            pid = await db.create_promocode(
+                code=code, kind=kind, value=value, max_uses=max_uses, expires_at=expires_at
+            )
+        except Exception as e:
+            await msg.answer(f"❌ Ошибка: {e}")
+            return
+        disp = f"-{value}%" if kind == "percent" else f"-{value}₽"
+        await msg.answer(
+            f"✅ Промокод <code>{code.upper()}</code> создан (#{pid})\n"
+            f"Скидка: <b>{disp}</b>\n"
+            f"Лимит: {'∞' if not max_uses else max_uses}\n"
+            f"Истекает: {expires_at or 'бессрочно'}"
+        )
+        return
+    await msg.answer("Неизвестная подкоманда. Используй: create | list")
+
+
 @router.message(Command("stats"))
 async def cmd_stats(msg: Message, db: DB) -> None:
     if not _is_admin(msg):

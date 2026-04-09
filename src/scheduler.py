@@ -55,6 +55,12 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
                 log.exception("activate failed for payment %s: %s", p.id, e)
                 continue
             await db.update_payment_status(p.id, "succeeded", sub.id)
+            # Списываем промо если был использован
+            if p.promo_id:
+                try:
+                    await db.use_promocode(p.promo_id, p.tg_id)
+                except Exception:
+                    pass
             try:
                 await bot.send_message(
                     p.tg_id,

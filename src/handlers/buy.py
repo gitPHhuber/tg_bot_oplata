@@ -1,6 +1,9 @@
 import logging
 
 from aiogram import F, Router
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from .. import messages, payments
@@ -15,38 +18,119 @@ log = logging.getLogger(__name__)
 router = Router(name="buy")
 
 
+class BuyStates(StatesGroup):
+    entering_promo = State()
+
+
+def _promo_label(kind: str, value: int) -> str:
+    return f"-{value}%" if kind == "percent" else f"-{value}₽"
+
+
+async def _get_active_promo(state: FSMContext) -> tuple[str, int, str] | None:
+    """Возвращает (kind, value, code) если в state есть применённый промо."""
+    data = await state.get_data()
+    code = data.get("promo_code")
+    kind = data.get("promo_kind")
+    value = data.get("promo_value")
+    if code and kind and value is not None:
+        return kind, int(value), code
+    return None
+
+
+async def _show_tariff_screen(target, state: FSMContext, edit: bool = False) -> None:
+    promo = await _get_active_promo(state)
+    label = _promo_label(promo[0], promo[1]) if promo else None
+    text = messages.TARIFF_LIST_HEADER
+    if promo:
+        text += f"\n\n🏷 Применён промо <b>{promo[2]}</b>: {label}"
+    kb = tariffs_kb(promo_label=label)
+    if edit:
+        try:
+            await target.edit_text(text, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await target.answer(text, reply_markup=kb)
+
+
 @router.message(F.text == messages.MENU_BUY)
-async def show_tariffs(msg: Message) -> None:
+async def show_tariffs(msg: Message, state: FSMContext) -> None:
     if settings.payment_mode == "manual":
         await msg.answer(
             "💳 Платёжный модуль пока не подключён.\n"
             "Чтобы получить доступ — напиши в поддержку."
         )
         return
-    await msg.answer(messages.TARIFF_LIST_HEADER, reply_markup=tariffs_kb())
+    await _show_tariff_screen(msg, state)
 
 
 @router.callback_query(F.data == "m:buy")
-async def cb_show_tariffs(cq: CallbackQuery) -> None:
+async def cb_show_tariffs(cq: CallbackQuery, state: FSMContext) -> None:
     if settings.payment_mode == "manual":
         await cq.answer(
             "Платёжный модуль пока не подключён. Напиши в поддержку.",
             show_alert=True,
         )
         return
-    try:
-        await cq.message.edit_text(
-            messages.TARIFF_LIST_HEADER, reply_markup=tariffs_kb()
-        )
-    except Exception:
-        await cq.message.answer(
-            messages.TARIFF_LIST_HEADER, reply_markup=tariffs_kb()
-        )
+    await _show_tariff_screen(cq.message, state, edit=True)
     await cq.answer()
 
 
-@router.callback_query(F.data.startswith("buy:"))
-async def on_buy_click(cq: CallbackQuery, db: DB) -> None:
+# ----- Промокод -----
+
+@router.callback_query(F.data == "buy:promo")
+async def cb_promo_start(cq: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(BuyStates.entering_promo)
+    await cq.message.answer(messages.PROMO_PROMPT)
+    await cq.answer()
+
+
+@router.message(StateFilter(BuyStates.entering_promo), Command("cancel"))
+async def promo_cancel(msg: Message, state: FSMContext) -> None:
+    await state.clear()
+    await msg.answer("Отменено.")
+
+
+@router.message(StateFilter(BuyStates.entering_promo))
+async def promo_apply(msg: Message, state: FSMContext, db: DB) -> None:
+    code = (msg.text or "").strip().upper()
+    promo = await db.get_promocode(code)
+    if not promo:
+        await msg.answer(messages.PROMO_INVALID)
+        return
+    pid, pcode, kind, value, max_uses, used_count, expires_at, enabled = promo
+    if not enabled:
+        await msg.answer(messages.PROMO_DISABLED)
+        return
+    if max_uses and used_count >= max_uses:
+        await msg.answer(messages.PROMO_USED_OUT)
+        return
+    if expires_at:
+        from datetime import datetime, timezone
+        if datetime.fromisoformat(expires_at) < datetime.now(timezone.utc):
+            await msg.answer(messages.PROMO_EXPIRED)
+            return
+    if await db.is_promo_used_by(pid, msg.from_user.id):
+        await msg.answer(messages.PROMO_USED_BY_YOU)
+        return
+
+    # Сохраним в state до момента покупки
+    await state.update_data(promo_code=pcode, promo_kind=kind, promo_value=value, promo_id=pid)
+    await state.set_state(None)
+    await msg.answer(
+        messages.PROMO_APPLIED.format(label=_promo_label(kind, value))
+    )
+    await _show_tariff_screen(msg, state)
+
+
+def _apply_promo_to_price(price: int, kind: str, value: int) -> int:
+    if kind == "percent":
+        return max(1, int(round(price * (100 - value) / 100)))
+    return max(1, price - value)
+
+
+@router.callback_query(F.data.startswith("buy:") & ~F.data.in_({"buy:promo"}))
+async def on_buy_click(cq: CallbackQuery, state: FSMContext, db: DB) -> None:
     code = cq.data.split(":", 1)[1]
     tariff = get_tariff(code)
     if not tariff:
@@ -57,8 +141,27 @@ async def on_buy_click(cq: CallbackQuery, db: DB) -> None:
         await cq.answer("Платежи отключены", show_alert=True)
         return
 
+    # Применяем промо если есть в state
+    promo = await _get_active_promo(state)
+    promo_id: int | None = None
+    final_price = tariff.price_rub
+    if promo:
+        kind, value, _pcode = promo
+        final_price = _apply_promo_to_price(tariff.price_rub, kind, value)
+        data = await state.get_data()
+        promo_id = data.get("promo_id")
+
     try:
-        created = await payments.create_payment(tariff, cq.from_user.id)
+        # Создаём ad-hoc Tariff с пересчитанной ценой для ЮKassa
+        from ..tariffs import Tariff as _T
+        priced = _T(
+            code=tariff.code,
+            title=tariff.title,
+            price_rub=final_price,
+            days=tariff.days,
+            traffic_gb=tariff.traffic_gb,
+        )
+        created = await payments.create_payment(priced, cq.from_user.id)
     except Exception as e:
         log.exception("create_payment failed")
         await cq.answer("Не удалось создать платёж, попробуй позже", show_alert=True)
@@ -68,19 +171,25 @@ async def on_buy_click(cq: CallbackQuery, db: DB) -> None:
         tg_id=cq.from_user.id,
         yk_id=created.yk_id,
         tariff_code=tariff.code,
-        amount_rub=tariff.price_rub,
+        amount_rub=final_price,
         status="pending",
+        promo_id=promo_id,
     )
 
+    price_line = (
+        f"{final_price}₽ <s>{tariff.price_rub}₽</s>"
+        if promo and final_price != tariff.price_rub
+        else f"{final_price}₽"
+    )
     await cq.message.edit_text(
-        messages.PAYMENT_CREATED.format(title=tariff.title, price=tariff.price_rub),
+        messages.PAYMENT_CREATED.format(title=tariff.title, price=price_line),
         reply_markup=pay_kb(created.confirmation_url, tariff.code),
     )
     await cq.answer()
 
 
 @router.callback_query(F.data.startswith("check:"))
-async def on_check_click(cq: CallbackQuery, db: DB, xui: XUIClient, bot) -> None:
+async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIClient, bot) -> None:
     """Юзер сам жмёт «проверить оплату» — гоним напрямую в ЮKassa."""
     pending = await db.get_pending_payments()
     user_pending = [p for p in pending if p.tg_id == cq.from_user.id]
@@ -101,6 +210,14 @@ async def on_check_click(cq: CallbackQuery, db: DB, xui: XUIClient, bot) -> None
             return
         sub, link = await activate_subscription(db, xui, cq.from_user.id, tariff)
         await db.update_payment_status(payment.id, "succeeded", sub.id)
+        # Списываем промо если был использован
+        if payment.promo_id:
+            try:
+                await db.use_promocode(payment.promo_id, cq.from_user.id)
+            except Exception:
+                pass
+        # Очищаем промо из state — повторное использование одним юзером невозможно
+        await state.update_data(promo_code=None, promo_kind=None, promo_value=None, promo_id=None)
         await cq.message.edit_text(
             messages.PAYMENT_SUCCESS.format(
                 tariff_title=tariff.title,

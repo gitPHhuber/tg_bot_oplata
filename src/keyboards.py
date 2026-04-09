@@ -10,48 +10,47 @@ from . import messages
 from .tariffs import TARIFFS, Tariff
 
 
-def main_menu_kb(is_admin: bool = False) -> ReplyKeyboardMarkup:
-    """Главное меню. Админу показываем дополнительный ряд с быстрыми действиями
-    + кнопкой 🛠 Админ-панель, открывающей inline-меню."""
-    rows: list[list[KeyboardButton]] = [
-        [KeyboardButton(text=messages.MENU_BUY)],
-        [
-            KeyboardButton(text=messages.MENU_PROFILE),
-            KeyboardButton(text=messages.MENU_HOWTO),
-        ],
-        [KeyboardButton(text=messages.MENU_SUPPORT)],
-    ]
-    if is_admin:
-        rows.append(
+def admin_reply_kb() -> ReplyKeyboardMarkup:
+    """Reply-клавиатура только для админов с быстрыми кнопками админки."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
             [
                 KeyboardButton(text=messages.MENU_ADMIN_STATS),
                 KeyboardButton(text=messages.MENU_ADMIN_USERS),
                 KeyboardButton(text=messages.MENU_ADMIN_SUBS),
-            ]
-        )
-        rows.append(
+            ],
             [
                 KeyboardButton(text=messages.MENU_ADMIN_GIFT),
                 KeyboardButton(text=messages.MENU_ADMIN_PANEL),
-            ]
-        )
-    return ReplyKeyboardMarkup(
-        keyboard=rows,
+            ],
+        ],
         resize_keyboard=True,
     )
 
 
-def tariffs_kb() -> InlineKeyboardMarkup:
+def tariffs_kb(promo_label: str | None = None) -> InlineKeyboardMarkup:
+    """Список тарифов. badge подсвечивает featured. Кнопка промо снизу."""
     rows: list[list[InlineKeyboardButton]] = []
     for t in TARIFFS:
+        prefix = "⭐ " if t.featured else ""
+        suffix = f"  {t.badge}" if t.badge else ""
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{t.title} — {t.price_rub}₽",
+                    text=f"{prefix}{t.title} — {t.price_rub}₽{suffix}",
                     callback_data=f"buy:{t.code}",
                 )
             ]
         )
+    promo_btn_text = (
+        f"🏷 Промокод: {promo_label}" if promo_label else "🏷 У меня есть промокод"
+    )
+    rows.append(
+        [InlineKeyboardButton(text=promo_btn_text, callback_data="buy:promo")]
+    )
+    rows.append(
+        [InlineKeyboardButton(text="◀️ В главное меню", callback_data="m:home")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -71,22 +70,58 @@ def back_kb() -> InlineKeyboardMarkup:
     )
 
 
-def main_inline_kb(channel_url: str = "") -> InlineKeyboardMarkup:
-    """Главное inline-меню в стиле «бренд». Показывается под /start."""
-    rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="🛒 Купить подписку", callback_data="m:buy")],
+def main_inline_kb(
+    channel_url: str = "",
+    show_trial: bool = False,
+) -> InlineKeyboardMarkup:
+    """Главное inline-меню в стиле «бренд». Показывается под /start.
+    show_trial=True показывает большую кнопку «🎁 Попробовать N дней бесплатно»."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if show_trial:
+        rows.append(
+            [InlineKeyboardButton(text="🎁 Попробовать 3 дня бесплатно", callback_data="m:trial")]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="🛒 Купить подписку", callback_data="m:buy")]
+    )
+    rows.append(
         [
             InlineKeyboardButton(text="🔐 Моя подписка",     callback_data="m:profile"),
             InlineKeyboardButton(text="📲 Как подключиться", callback_data="m:howto"),
-        ],
-        [InlineKeyboardButton(text="🤝 Реферальная программа", callback_data="m:ref")],
-    ]
+        ]
+    )
+    rows.append(
+        [InlineKeyboardButton(text="🤝 Реферальная программа", callback_data="m:ref")]
+    )
     third_row: list[InlineKeyboardButton] = []
     if channel_url:
         third_row.append(InlineKeyboardButton(text="🌟 Наш канал", url=channel_url))
     third_row.append(InlineKeyboardButton(text="ℹ️ О нас", callback_data="m:about"))
     rows.append(third_row)
     rows.append([InlineKeyboardButton(text="🆘 Помощь", callback_data="m:help")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def profile_kb(has_active_sub: bool) -> InlineKeyboardMarkup:
+    """Действия в карточке моей подписки."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if has_active_sub:
+        rows.append(
+            [
+                InlineKeyboardButton(text="📋 Скопировать ключ", callback_data="p:copy"),
+                InlineKeyboardButton(text="📲 QR-код",            callback_data="p:qr"),
+            ]
+        )
+        rows.append(
+            [InlineKeyboardButton(text="➕ Продлить", callback_data="m:buy")]
+        )
+    else:
+        rows.append(
+            [InlineKeyboardButton(text="🛒 Купить подписку", callback_data="m:buy")]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="◀️ В главное меню", callback_data="m:home")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

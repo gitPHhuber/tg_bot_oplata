@@ -13,6 +13,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats
 
 from .config import settings
 from .db import DB
@@ -25,7 +26,7 @@ from .handlers import (
     start_router,
     support_router,
 )
-from .middlewares import DependenciesMiddleware
+from .middlewares import DependenciesMiddleware, ThrottlingMiddleware
 from .scheduler import setup_scheduler
 from .xui_client import XUIClient
 
@@ -69,6 +70,8 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
     dp.update.middleware(DependenciesMiddleware(db, xui))
+    dp.message.middleware(ThrottlingMiddleware(interval=0.4))
+    dp.callback_query.middleware(ThrottlingMiddleware(interval=0.4))
     # ВАЖНО: порядок имеет значение.
     # 1) start — самый общий /start
     # 2) admin_panel — inline-меню /admin со своим набором FSM-состояний
@@ -88,6 +91,18 @@ async def main() -> None:
     scheduler.start()
     log.info("scheduler started: poll=%ss, expire-check=%smin",
              settings.payment_poll_interval, settings.sub_check_interval)
+
+    # Регистрируем команды бота — TG покажет их в кнопке Меню рядом со скрепкой
+    await bot.set_my_commands(
+        [
+            BotCommand(command="start",   description="Главное меню"),
+            BotCommand(command="profile", description="Моя подписка"),
+            BotCommand(command="buy",     description="Купить доступ"),
+            BotCommand(command="ref",     description="Реферальная программа"),
+            BotCommand(command="help",    description="Помощь"),
+        ],
+        scope=BotCommandScopeAllPrivateChats(),
+    )
 
     try:
         await bot.delete_webhook(drop_pending_updates=True)
