@@ -85,6 +85,9 @@ def main_inline_kb(
         [InlineKeyboardButton(text="🛒 Купить подписку", callback_data="m:buy")]
     )
     rows.append(
+        [InlineKeyboardButton(text="🎁 Подарить другу", callback_data="m:gift")]
+    )
+    rows.append(
         [
             InlineKeyboardButton(text="🔐 Моя подписка",     callback_data="m:profile"),
             InlineKeyboardButton(text="📲 Как подключиться", callback_data="m:howto"),
@@ -99,6 +102,26 @@ def main_inline_kb(
     third_row.append(InlineKeyboardButton(text="ℹ️ О нас", callback_data="m:about"))
     rows.append(third_row)
     rows.append([InlineKeyboardButton(text="🆘 Помощь", callback_data="m:help")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def gift_tariffs_kb() -> InlineKeyboardMarkup:
+    """Список тарифов в режиме подарка — callback другого префикса."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for t in TARIFFS:
+        prefix = "⭐ " if t.featured else ""
+        suffix = f"  {t.badge}" if t.badge else ""
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{prefix}{t.title} — {t.price_rub}₽{suffix}",
+                    callback_data=f"gft:{t.code}",
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="◀️ Отмена", callback_data="m:home")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

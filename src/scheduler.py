@@ -49,8 +49,10 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
                 log.warning("payment %s: tariff %s not found", p.id, p.tariff_code)
                 await db.update_payment_status(p.id, "canceled")
                 continue
+            # Кому активируем: если есть recipient — это gift, иначе самому покупателю
+            beneficiary_id = p.recipient_tg_id or p.tg_id
             try:
-                sub, link = await activate_subscription(db, xui, p.tg_id, tariff)
+                sub, link = await activate_subscription(db, xui, beneficiary_id, tariff)
             except Exception as e:
                 log.exception("activate failed for payment %s: %s", p.id, e)
                 continue
@@ -61,19 +63,53 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
                     await db.use_promocode(p.promo_id, p.tg_id)
                 except Exception:
                     pass
-            try:
-                await bot.send_message(
-                    p.tg_id,
-                    messages.PAYMENT_SUCCESS.format(
-                        tariff_title=tariff.title,
-                        expires=format_dt_human(sub.expires_at),
-                        link=link,
-                    ),
+
+            if p.recipient_tg_id:
+                # Это gift: уведомляем покупателя и получателя отдельно
+                buyer = await db.get_user(p.tg_id)
+                buyer_name = (
+                    (buyer[2] if buyer else None)
+                    or (f"@{buyer[1]}" if buyer and buyer[1] else "друг")
                 )
-            except Exception as e:
-                log.warning("notify user %s failed: %s", p.tg_id, e)
-            # Реферальный бонус — после успешной активации первой оплаты
-            await process_referral_after_activation(db, xui, bot, p.tg_id)
+                try:
+                    await bot.send_message(
+                        p.recipient_tg_id,
+                        messages.GIFT_RECEIVED_FROM_FRIEND.format(
+                            from_name=buyer_name,
+                            tariff_title=tariff.title,
+                            expires=format_dt_human(sub.expires_at),
+                            link=link,
+                        ),
+                    )
+                except Exception as e:
+                    log.warning("notify gift recipient %s failed: %s", p.recipient_tg_id, e)
+                try:
+                    await bot.send_message(
+                        p.tg_id,
+                        messages.GIFT_DELIVERED_TO_BUYER.format(
+                            recipient_id=p.recipient_tg_id,
+                            tariff_title=tariff.title,
+                            expires=format_dt_human(sub.expires_at),
+                        ),
+                    )
+                except Exception as e:
+                    log.warning("notify gift buyer %s failed: %s", p.tg_id, e)
+            else:
+                try:
+                    await bot.send_message(
+                        p.tg_id,
+                        messages.PAYMENT_SUCCESS.format(
+                            tariff_title=tariff.title,
+                            expires=format_dt_human(sub.expires_at),
+                            link=link,
+                        ),
+                    )
+                except Exception as e:
+                    log.warning("notify user %s failed: %s", p.tg_id, e)
+
+            # Реферальный бонус — за beneficiary, не за плательщика (логично:
+            # если пригласённый получил подарок — это его первая активация)
+            await process_referral_after_activation(db, xui, bot, beneficiary_id)
         elif status == "canceled":
             await db.update_payment_status(p.id, "canceled")
 

@@ -208,7 +208,8 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
         if not tariff:
             await cq.answer("Тариф удалён, обратись в поддержку", show_alert=True)
             return
-        sub, link = await activate_subscription(db, xui, cq.from_user.id, tariff)
+        beneficiary_id = payment.recipient_tg_id or cq.from_user.id
+        sub, link = await activate_subscription(db, xui, beneficiary_id, tariff)
         await db.update_payment_status(payment.id, "succeeded", sub.id)
         # Списываем промо если был использован
         if payment.promo_id:
@@ -218,14 +219,42 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                 pass
         # Очищаем промо из state — повторное использование одним юзером невозможно
         await state.update_data(promo_code=None, promo_kind=None, promo_value=None, promo_id=None)
-        await cq.message.edit_text(
-            messages.PAYMENT_SUCCESS.format(
-                tariff_title=tariff.title,
-                expires=sub.expires_at[:16].replace("T", " ") + " UTC",
-                link=link,
+
+        if payment.recipient_tg_id:
+            # gift flow: получателю шлём ключ, покупателю — подтверждение
+            buyer = await db.get_user(cq.from_user.id)
+            buyer_name = (
+                (buyer[2] if buyer else None)
+                or (f"@{buyer[1]}" if buyer and buyer[1] else "друг")
             )
-        )
-        await process_referral_after_activation(db, xui, bot, cq.from_user.id)
+            try:
+                await bot.send_message(
+                    payment.recipient_tg_id,
+                    messages.GIFT_RECEIVED_FROM_FRIEND.format(
+                        from_name=buyer_name,
+                        tariff_title=tariff.title,
+                        expires=sub.expires_at[:16].replace("T", " ") + " UTC",
+                        link=link,
+                    ),
+                )
+            except Exception as e:
+                log.warning("notify gift recipient %s failed: %s", payment.recipient_tg_id, e)
+            await cq.message.edit_text(
+                messages.GIFT_DELIVERED_TO_BUYER.format(
+                    recipient_id=payment.recipient_tg_id,
+                    tariff_title=tariff.title,
+                    expires=sub.expires_at[:16].replace("T", " ") + " UTC",
+                )
+            )
+        else:
+            await cq.message.edit_text(
+                messages.PAYMENT_SUCCESS.format(
+                    tariff_title=tariff.title,
+                    expires=sub.expires_at[:16].replace("T", " ") + " UTC",
+                    link=link,
+                )
+            )
+        await process_referral_after_activation(db, xui, bot, beneficiary_id)
         return
     if status == "canceled":
         await db.update_payment_status(payment.id, "canceled")

@@ -21,6 +21,7 @@ from .handlers import (
     admin_panel_router,
     admin_router,
     buy_router,
+    gift_friend_router,
     profile_router,
     referral_router,
     start_router,
@@ -82,6 +83,7 @@ async def main() -> None:
     dp.include_router(start_router)
     dp.include_router(admin_panel_router)
     dp.include_router(admin_router)
+    dp.include_router(gift_friend_router)
     dp.include_router(buy_router)
     dp.include_router(profile_router)
     dp.include_router(referral_router)

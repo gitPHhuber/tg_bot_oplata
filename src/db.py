@@ -121,6 +121,7 @@ class Payment:
     updated_at: str
     sub_id: Optional[int]
     promo_id: Optional[int] = None
+    recipient_tg_id: Optional[int] = None
 
 
 class DB:
@@ -158,6 +159,9 @@ class DB:
         pcols = {row[1] for row in await cur2.fetchall()}
         if "promo_id" not in pcols:
             await conn.execute("ALTER TABLE payments ADD COLUMN promo_id INTEGER")
+        if "recipient_tg_id" not in pcols:
+            # NULL — подписка покупателю; иначе — gift-получатель
+            await conn.execute("ALTER TABLE payments ADD COLUMN recipient_tg_id INTEGER")
         # индекс создаём ПОСЛЕ ALTER, чтобы он не падал на пустой схеме
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_users_referrer ON users(referrer_id)"
@@ -464,13 +468,14 @@ class DB:
         amount_rub: int,
         status: str,
         promo_id: Optional[int] = None,
+        recipient_tg_id: Optional[int] = None,
     ) -> int:
         async with aiosqlite.connect(self.path) as conn:
             cur = await conn.execute(
                 """INSERT INTO payments
-                   (tg_id, yk_id, tariff_code, amount_rub, status, created_at, updated_at, promo_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (tg_id, yk_id, tariff_code, amount_rub, status, now_iso(), now_iso(), promo_id),
+                   (tg_id, yk_id, tariff_code, amount_rub, status, created_at, updated_at, promo_id, recipient_tg_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (tg_id, yk_id, tariff_code, amount_rub, status, now_iso(), now_iso(), promo_id, recipient_tg_id),
             )
             await conn.commit()
             return cur.lastrowid or 0
@@ -567,4 +572,5 @@ def _row_to_pay(row) -> Payment:
         updated_at=row[7],
         sub_id=row[8],
         promo_id=row[9] if len(row) > 9 else None,
+        recipient_tg_id=row[10] if len(row) > 10 else None,
     )
