@@ -57,8 +57,6 @@ CREATE TABLE IF NOT EXISTS support_threads (
     PRIMARY KEY (admin_chat_id, admin_msg_id)
 );
 CREATE INDEX IF NOT EXISTS idx_support_user ON support_threads(user_tg_id);
-
-CREATE INDEX IF NOT EXISTS idx_users_referrer ON users(referrer_id);
 """
 
 
@@ -130,6 +128,10 @@ class DB:
         cols = {row[1] for row in await cur.fetchall()}
         if "referrer_id" not in cols:
             await conn.execute("ALTER TABLE users ADD COLUMN referrer_id INTEGER")
+        # индекс создаём ПОСЛЕ ALTER, чтобы он не падал на пустой схеме
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_referrer ON users(referrer_id)"
+        )
 
     # ---------- users ----------
     async def upsert_user(self, tg_id: int, username: str | None, first_name: str | None) -> None:
