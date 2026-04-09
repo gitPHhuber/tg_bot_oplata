@@ -1,4 +1,4 @@
-"""Middleware: инжектит общие зависимости (db, xui, admin_username) в handler kwargs."""
+"""Middleware: инжектит общие зависимости (db, xui) в handler kwargs."""
 from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware
@@ -9,11 +9,10 @@ from .xui_client import XUIClient
 
 
 class DependenciesMiddleware(BaseMiddleware):
-    def __init__(self, db: DB, xui: XUIClient, admin_username: str):
+    def __init__(self, db: DB, xui: XUIClient):
         super().__init__()
         self.db = db
         self.xui = xui
-        self.admin_username = admin_username
 
     async def __call__(
         self,
@@ -23,5 +22,4 @@ class DependenciesMiddleware(BaseMiddleware):
     ) -> Any:
         data["db"] = self.db
         data["xui"] = self.xui
-        data["admin_username"] = self.admin_username
         return await handler(event, data)

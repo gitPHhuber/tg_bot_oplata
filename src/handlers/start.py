@@ -1,5 +1,6 @@
 from aiogram import F, Router
 from aiogram.filters import CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from .. import messages
@@ -10,7 +11,9 @@ router = Router(name="start")
 
 
 @router.message(CommandStart())
-async def cmd_start(msg: Message, db: DB) -> None:
+async def cmd_start(msg: Message, state: FSMContext, db: DB) -> None:
+    # Любое /start сбрасывает текущее FSM-состояние (например, выход из поддержки)
+    await state.clear()
     await db.upsert_user(
         tg_id=msg.from_user.id,
         username=msg.from_user.username,
@@ -26,8 +29,3 @@ async def cmd_start(msg: Message, db: DB) -> None:
 @router.message(F.text == messages.MENU_HOWTO)
 async def show_howto(msg: Message) -> None:
     await msg.answer(messages.HOWTO)
-
-
-@router.message(F.text == messages.MENU_SUPPORT)
-async def show_support(msg: Message, admin_username: str) -> None:
-    await msg.answer(messages.SUPPORT.format(admin_username=admin_username))

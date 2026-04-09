@@ -46,6 +46,16 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE INDEX IF NOT EXISTS idx_subs_tg ON subscriptions(tg_id);
 CREATE INDEX IF NOT EXISTS idx_subs_exp ON subscriptions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_pay_status ON payments(status);
+
+CREATE TABLE IF NOT EXISTS support_threads (
+    -- mapping: пересланное в чат админа сообщение → исходный user_tg_id
+    admin_chat_id  INTEGER NOT NULL,
+    admin_msg_id   INTEGER NOT NULL,
+    user_tg_id     INTEGER NOT NULL,
+    created_at     TEXT NOT NULL,
+    PRIMARY KEY (admin_chat_id, admin_msg_id)
+);
+CREATE INDEX IF NOT EXISTS idx_support_user ON support_threads(user_tg_id);
 """
 
 
@@ -225,6 +235,30 @@ class DB:
                     (status, now_iso(), payment_id),
                 )
             await conn.commit()
+
+    # ---------- support ----------
+    async def save_support_thread(
+        self, admin_chat_id: int, admin_msg_id: int, user_tg_id: int
+    ) -> None:
+        async with aiosqlite.connect(self.path) as conn:
+            await conn.execute(
+                """INSERT OR REPLACE INTO support_threads
+                   (admin_chat_id, admin_msg_id, user_tg_id, created_at)
+                   VALUES (?, ?, ?, ?)""",
+                (admin_chat_id, admin_msg_id, user_tg_id, now_iso()),
+            )
+            await conn.commit()
+
+    async def find_support_user(
+        self, admin_chat_id: int, admin_msg_id: int
+    ) -> Optional[int]:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT user_tg_id FROM support_threads WHERE admin_chat_id = ? AND admin_msg_id = ?",
+                (admin_chat_id, admin_msg_id),
+            )
+            row = await cur.fetchone()
+            return int(row[0]) if row else None
 
     async def count_payments(self) -> tuple[int, int]:
         """Возвращает (всего успешных, сумма выручки в рублях)."""

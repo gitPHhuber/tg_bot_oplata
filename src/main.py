@@ -12,10 +12,17 @@ import sys
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from .config import settings
 from .db import DB
-from .handlers import admin_router, buy_router, profile_router, start_router
+from .handlers import (
+    admin_router,
+    buy_router,
+    profile_router,
+    start_router,
+    support_router,
+)
 from .middlewares import DependenciesMiddleware
 from .scheduler import setup_scheduler
 from .xui_client import XUIClient
@@ -57,14 +64,18 @@ async def main() -> None:
     )
     me = await bot.get_me()
     log.info("authorized as @%s", me.username)
-    admin_username = me.username or "admin"
 
-    dp = Dispatcher()
-    dp.update.middleware(DependenciesMiddleware(db, xui, admin_username))
+    dp = Dispatcher(storage=MemoryStorage())
+    dp.update.middleware(DependenciesMiddleware(db, xui))
+    # ВАЖНО: порядок имеет значение.
+    # admin_router принимает команды (/grant, /stats, ...) и должен быть ДО support_router,
+    # потому что support ловит "любое сообщение от админа с reply" — без приоритета
+    # команд он бы поглощал админ-команды, отправленные в reply на чужое сообщение.
     dp.include_router(start_router)
     dp.include_router(buy_router)
     dp.include_router(profile_router)
     dp.include_router(admin_router)
+    dp.include_router(support_router)
 
     scheduler = setup_scheduler(db, xui, bot)
     scheduler.start()
