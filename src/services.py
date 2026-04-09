@@ -18,6 +18,26 @@ from .xui_client import XUIClient, days_from_now_unix_ms
 log = logging.getLogger(__name__)
 
 
+async def activate_gift_subscription(
+    db: DB,
+    xui: XUIClient,
+    tg_id: int,
+    days: int,
+    traffic_gb: int = 0,
+) -> tuple[Subscription, str]:
+    """Подарок: подписка на N дней без привязки к существующему тарифу.
+    Tariff_code сохраняется как 'gift_<days>d', чтобы потом отличать в статистике.
+    """
+    gift = Tariff(
+        code=f"gift_{days}d",
+        title=f"🎁 Подарок · {days} дн.",
+        price_rub=0,
+        days=days,
+        traffic_gb=traffic_gb,
+    )
+    return await activate_subscription(db, xui, tg_id, gift)
+
+
 async def activate_subscription(
     db: DB,
     xui: XUIClient,

@@ -29,7 +29,12 @@ def main_menu_kb(is_admin: bool = False) -> ReplyKeyboardMarkup:
                 KeyboardButton(text=messages.MENU_ADMIN_SUBS),
             ]
         )
-        rows.append([KeyboardButton(text=messages.MENU_ADMIN_PANEL)])
+        rows.append(
+            [
+                KeyboardButton(text=messages.MENU_ADMIN_GIFT),
+                KeyboardButton(text=messages.MENU_ADMIN_PANEL),
+            ]
+        )
     return ReplyKeyboardMarkup(
         keyboard=rows,
         resize_keyboard=True,
@@ -72,20 +77,20 @@ def admin_main_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="📊 Stats", callback_data="adm:stats"),
-                InlineKeyboardButton(text="🖥 Server", callback_data="adm:server"),
+                InlineKeyboardButton(text="📊 Статистика", callback_data="adm:stats"),
+                InlineKeyboardButton(text="🖥 Сервер",     callback_data="adm:server"),
             ],
             [
-                InlineKeyboardButton(text="👥 Users", callback_data="adm:users:0"),
-                InlineKeyboardButton(text="🔐 Active subs", callback_data="adm:subs:0"),
+                InlineKeyboardButton(text="👥 Юзеры",      callback_data="adm:users:0"),
+                InlineKeyboardButton(text="🔐 Подписки",   callback_data="adm:subs:0"),
             ],
             [
-                InlineKeyboardButton(text="🔍 Find user", callback_data="adm:find"),
-                InlineKeyboardButton(text="➕ Extend sub", callback_data="adm:extend"),
+                InlineKeyboardButton(text="🔍 Найти юзера", callback_data="adm:find"),
+                InlineKeyboardButton(text="🎁 Подарок",     callback_data="adm:gift"),
             ],
             [
-                InlineKeyboardButton(text="📨 Send DM", callback_data="adm:senddm"),
-                InlineKeyboardButton(text="📢 Broadcast", callback_data="adm:bcast"),
+                InlineKeyboardButton(text="📨 Сообщение",  callback_data="adm:senddm"),
+                InlineKeyboardButton(text="📢 Рассылка",   callback_data="adm:bcast"),
             ],
             [InlineKeyboardButton(text="❌ Закрыть", callback_data="adm:close")],
         ]

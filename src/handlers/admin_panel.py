@@ -39,6 +39,7 @@ from ..keyboards import (
     admin_user_card_kb,
 )
 from ..services import (
+    activate_gift_subscription,
     activate_subscription,
     deactivate_subscription,
     extend_subscription,
@@ -63,6 +64,8 @@ class AdminStates(StatesGroup):
     sending_dm_text = State()
     broadcasting = State()
     broadcast_confirm = State()
+    gifting_user = State()
+    gifting_days = State()
 
 
 class IsAdmin(BaseFilter):
@@ -110,9 +113,9 @@ async def menu_admin_users(msg: Message, db: DB) -> None:
     total_pages = max((total + USERS_PER_PAGE - 1) // USERS_PER_PAGE, 1)
     rows = await db.get_users_page(USERS_PER_PAGE, 0)
     if not rows:
-        txt = "👥 <b>Users</b>\n\nПусто."
+        txt = "👥 <b>Юзеры</b>\n\nПусто."
     else:
-        lines = [f"👥 <b>Users</b> ({total})\n"]
+        lines = [f"👥 <b>Юзеры</b> ({total})\n"]
         for tg_id, username, first_name, _ in rows:
             uname = f"@{username}" if username else "—"
             name = first_name or "?"
@@ -130,9 +133,9 @@ async def menu_admin_subs(msg: Message, db: DB, xui: XUIClient) -> None:
     stats = await xui.get_inbound_client_stats(settings.xui_inbound_id)
     by_email = {s.get("email"): s for s in stats}
     if not subs:
-        txt = "🔐 <b>Active subs</b>\n\nПусто."
+        txt = "🔐 <b>Активные подписки</b>\n\nПусто."
     else:
-        lines = [f"🔐 <b>Active subs</b> ({total})\n"]
+        lines = [f"🔐 <b>Активные подписки</b> ({total})\n"]
         for s in subs:
             cs = by_email.get(s.xui_email) or {}
             up = cs.get("up", 0) or 0
@@ -233,7 +236,7 @@ async def cb_stats_period(cq: CallbackQuery, db: DB) -> None:
 async def cb_server(cq: CallbackQuery, xui: XUIClient) -> None:
     status = await xui.get_server_status()
     if not status:
-        txt = "🖥 <b>Server status</b>\n\n⚠️ Не удалось получить данные от 3x-ui."
+        txt = "🖥 <b>Состояние сервера</b>\n\n⚠️ Не удалось получить данные от 3x-ui."
     else:
         cpu = status.get("cpu", 0)
         cpu_speed = status.get("cpuSpeedMhz", 0)
@@ -266,15 +269,15 @@ async def cb_server(cq: CallbackQuery, xui: XUIClient) -> None:
             return f"{d}d {h}h {m}m"
 
         txt = (
-            "🖥 <b>Server status</b>\n\n"
-            f"⏱ Uptime: <b>{_hms(uptime)}</b>\n"
-            f"⚙️ CPU: <b>{cpu:.1f}%</b> ({cpu_cores} cores @ {cpu_speed} MHz)\n"
+            "🖥 <b>Состояние сервера</b>\n\n"
+            f"⏱ Аптайм: <b>{_hms(uptime)}</b>\n"
+            f"⚙️ CPU: <b>{cpu:.1f}%</b> ({cpu_cores} ядра @ {cpu_speed} МГц)\n"
             f"📈 Load avg: {loads[0]:.2f} / {loads[1]:.2f} / {loads[2]:.2f}\n"
             f"🧠 RAM: <b>{_gb(mem_used)} / {_gb(mem_total)}</b> ({mem_pct:.0f}%)\n"
-            f"💾 Disk: <b>{_gb(disk_used)} / {_gb(disk_total)}</b> ({disk_pct:.0f}%)\n\n"
+            f"💾 Диск: <b>{_gb(disk_used)} / {_gb(disk_total)}</b> ({disk_pct:.0f}%)\n\n"
             f"🟢 Xray: <b>{xray_state}</b> v{xray_ver}\n"
             f"🌐 TCP: <b>{tcp}</b> · UDP: <b>{udp}</b>\n"
-            f"📤 Sent: <b>{_gb(net_up)}</b> · 📥 Recv: <b>{_gb(net_down)}</b>"
+            f"📤 Отправлено: <b>{_gb(net_up)}</b> · 📥 Получено: <b>{_gb(net_down)}</b>"
         )
     try:
         await cq.message.edit_text(txt, reply_markup=admin_back_kb())
@@ -293,9 +296,9 @@ async def cb_users(cq: CallbackQuery, db: DB) -> None:
     page = max(0, min(page, total_pages - 1))
     rows = await db.get_users_page(USERS_PER_PAGE, page * USERS_PER_PAGE)
     if not rows:
-        txt = "👥 <b>Users</b>\n\nПусто."
+        txt = "👥 <b>Юзеры</b>\n\nПусто."
     else:
-        lines = [f"👥 <b>Users</b> ({total})\n"]
+        lines = [f"👥 <b>Юзеры</b> ({total})\n"]
         for tg_id, username, first_name, created in rows:
             uname = f"@{username}" if username else "—"
             name = first_name or "?"
@@ -346,7 +349,7 @@ async def _show_user_card(target: Message, tg_id: int, db: DB, xui: XUIClient, e
     active_subs = [s for s in subs if s.active and not s.is_expired]
 
     lines = [
-        f"👤 <b>User card</b>",
+        f"👤 <b>Карточка пользователя</b>",
         f"ID: <code>{tg_id}</code>",
         f"Имя: {first_name or '—'}",
         f"Username: @{username}" if username else "Username: —",
@@ -395,9 +398,9 @@ async def cb_subs(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
     by_email = {s.get("email"): s for s in stats}
 
     if not subs:
-        txt = "🔐 <b>Active subs</b>\n\nПусто."
+        txt = "🔐 <b>Активные подписки</b>\n\nПусто."
     else:
-        lines = [f"🔐 <b>Active subs</b> ({total})\n"]
+        lines = [f"🔐 <b>Активные подписки</b> ({total})\n"]
         for s in subs:
             cs = by_email.get(s.xui_email) or {}
             up = cs.get("up", 0) or 0
@@ -556,6 +559,143 @@ async def cb_grant_apply(cq: CallbackQuery, db: DB, xui: XUIClient, bot: Bot) ->
         reply_markup=admin_back_kb(),
     )
     await cq.answer("Готово")
+
+
+# ---------- 🎁 Gift (подарить подписку на N дней) ----------
+
+# Кнопка из reply-клавиатуры
+@router.message(F.text == messages.MENU_ADMIN_GIFT)
+async def menu_gift_entry(msg: Message, state: FSMContext) -> None:
+    await state.set_state(AdminStates.gifting_user)
+    await msg.answer(
+        "🎁 <b>Подарить ключ</b>\n\n"
+        "Кому подарить? Пришли <code>tg_id</code> или <code>@username</code>.\n\n"
+        "/cancel — отмена",
+    )
+
+
+# Кнопка из inline-меню
+@router.callback_query(F.data == "adm:gift")
+async def cb_gift_entry(cq: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(AdminStates.gifting_user)
+    await cq.message.edit_text(
+        "🎁 <b>Подарить ключ</b>\n\n"
+        "Кому подарить? Пришли <code>tg_id</code> или <code>@username</code>.\n\n"
+        "/cancel — отмена",
+        reply_markup=admin_back_kb(),
+    )
+    await cq.answer()
+
+
+@router.message(StateFilter(AdminStates.gifting_user), Command("cancel"))
+@router.message(StateFilter(AdminStates.gifting_days), Command("cancel"))
+async def gift_cancel(msg: Message, state: FSMContext) -> None:
+    await state.clear()
+    await msg.answer("Отменено.", reply_markup=admin_main_kb())
+
+
+@router.message(StateFilter(AdminStates.gifting_user))
+async def gift_pick_user(msg: Message, state: FSMContext, db: DB) -> None:
+    q = (msg.text or "").strip()
+    target_id: int | None = None
+    if q.isdigit():
+        target_id = int(q)
+    elif q.startswith("@"):
+        row = await db.find_user_by_username(q)
+        if row:
+            target_id = int(row[0])
+        else:
+            await msg.answer(
+                f"❓ Юзер {q} не найден в БД (он должен хотя бы раз нажать /start). "
+                f"Можно также просто прислать его tg_id."
+            )
+            return
+    if target_id is None:
+        await msg.answer("Нужен tg_id (число) или @username. /cancel — отмена")
+        return
+
+    await state.update_data(target_id=target_id)
+    await state.set_state(AdminStates.gifting_days)
+    await msg.answer(
+        f"Получатель: <code>{target_id}</code>\n\n"
+        f"На сколько дней дарим? Пришли число (например <b>3</b>, <b>7</b>, <b>30</b>).\n\n"
+        f"Можно также через пробел указать лимит трафика в GB: <code>7 50</code> "
+        f"(7 дней, 50 GB). Без второго числа — без лимита."
+    )
+
+
+@router.message(StateFilter(AdminStates.gifting_days))
+async def gift_pick_days(
+    msg: Message, state: FSMContext, db: DB, xui: XUIClient, bot: Bot
+) -> None:
+    parts = (msg.text or "").strip().split()
+    if not parts or not parts[0].isdigit():
+        await msg.answer("Нужно число дней. /cancel — отмена")
+        return
+    days = int(parts[0])
+    traffic_gb = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+    if days <= 0 or days > 3650:
+        await msg.answer("Дней должно быть от 1 до 3650. /cancel — отмена")
+        return
+
+    data = await state.get_data()
+    await state.clear()
+    target_id = int(data.get("target_id", 0))
+    if not target_id:
+        await msg.answer("Внутренняя ошибка, попробуй заново.", reply_markup=admin_main_kb())
+        return
+
+    # убеждаемся что юзер есть в БД
+    await db.upsert_user(tg_id=target_id, username=None, first_name=None)
+
+    try:
+        sub, link = await activate_gift_subscription(
+            db, xui, target_id, days=days, traffic_gb=traffic_gb
+        )
+    except Exception as e:
+        log.exception("gift failed")
+        await msg.answer(f"❌ Не удалось создать подписку: {e}", reply_markup=admin_main_kb())
+        return
+
+    # запишем как «manual» платёж с amount=0 для статистики
+    await db.create_payment(
+        tg_id=target_id,
+        yk_id=None,
+        tariff_code=sub.tariff_code,
+        amount_rub=0,
+        status="manual",
+    )
+
+    traffic_label = "без лимита" if traffic_gb == 0 else f"{traffic_gb} GB"
+    # Сообщение получателю
+    try:
+        await bot.send_message(
+            target_id,
+            f"🎁 <b>Тебе подарили подписку!</b>\n\n"
+            f"Срок: <b>{days} дн.</b>\n"
+            f"Трафик: <b>{traffic_label}</b>\n"
+            f"Действует до: <b>{format_dt_human(sub.expires_at)}</b>\n\n"
+            f"<b>Ключ для подключения:</b>\n"
+            f"<code>{link}</code>\n\n"
+            f"Скопируй ссылку и добавь в Hiddify (см. «📲 Как подключиться»).",
+        )
+        delivered_note = "✅ Сообщение с ключом отправлено получателю."
+    except Exception as e:
+        log.warning("gift: notify user %s failed: %s", target_id, e)
+        delivered_note = (
+            f"⚠️ Не удалось отправить юзеру (он не запускал бот?): {e}\n"
+            f"Перешли ему ключ вручную."
+        )
+
+    await msg.answer(
+        f"🎁 <b>Подарок создан</b>\n\n"
+        f"Получатель: <code>{target_id}</code>\n"
+        f"Срок: <b>{days} дн.</b> · Трафик: <b>{traffic_label}</b>\n"
+        f"До: {format_dt_human(sub.expires_at)}\n\n"
+        f"{delivered_note}\n\n"
+        f"<b>Ключ:</b>\n<code>{link}</code>",
+        reply_markup=admin_main_kb(),
+    )
 
 
 # ---------- 📨 Send DM ----------

@@ -17,9 +17,10 @@ MENU_SUPPORT = "💬 Поддержка"
 
 # админский ряд (виден только админам)
 MENU_ADMIN_PANEL = "🛠 Админ-панель"
-MENU_ADMIN_STATS = "📊 Stats"
-MENU_ADMIN_SUBS = "🔐 Subs"
-MENU_ADMIN_USERS = "👥 Users"
+MENU_ADMIN_STATS = "📊 Статистика"
+MENU_ADMIN_SUBS = "🔐 Подписки"
+MENU_ADMIN_USERS = "👥 Юзеры"
+MENU_ADMIN_GIFT = "🎁 Подарить ключ"
 
 TARIFF_LIST_HEADER = "Выбери тариф:"
 
