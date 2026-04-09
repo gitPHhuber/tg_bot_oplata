@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from .config import settings
@@ -66,6 +66,34 @@ async def deactivate_subscription(
     except Exception as e:
         log.warning("xui delete_client failed for sub %s: %s", sub.id, e)
     await db.deactivate_subscription(sub.id)
+
+
+async def extend_subscription(
+    db: DB,
+    xui: XUIClient,
+    sub: Subscription,
+    extra_days: int,
+) -> Subscription:
+    """Продлить подписку на N дней. Если истекла — отсчёт от сейчас, иначе от текущей expires."""
+    now = datetime.now(timezone.utc)
+    base = max(sub.expires_dt, now)
+    new_expires = base + timedelta(days=extra_days)
+    new_expires_ms = int(new_expires.timestamp() * 1000)
+    new_expires_iso = new_expires.isoformat()
+
+    await xui.update_client(
+        inbound_id=settings.xui_inbound_id,
+        client_uuid=sub.xui_uuid,
+        email=sub.xui_email,
+        total_gb=sub.traffic_gb,
+        expiry_unix_ms=new_expires_ms,
+        enable=True,
+    )
+    await db.extend_subscription(sub.id, new_expires_iso)
+    updated = await db.get_subscription(sub.id)
+    assert updated is not None
+    log.info("extended sub %s: +%dd → %s", sub.id, extra_days, new_expires_iso)
+    return updated
 
 
 def format_traffic(gb: int) -> str:

@@ -20,13 +20,9 @@ def _is_admin(msg: Message) -> bool:
     return settings.is_admin(msg.from_user.id)
 
 
-@router.message(Command("admin"))
-async def cmd_admin(msg: Message) -> None:
-    if not _is_admin(msg):
-        await msg.answer(messages.ADMIN_ONLY)
-        return
-    codes = ", ".join(t.code for t in TARIFFS)
-    await msg.answer(messages.ADMIN_HELP.format(tariff_codes=codes))
+# /admin перенесён в handlers/admin_panel.py — там полноценная inline-админка.
+# Старые CLI-команды /stats /grant /revoke /userinfo оставлены как
+# быстрый доступ из любого места без открытия меню.
 
 
 @router.message(Command("stats"))

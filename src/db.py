@@ -136,6 +136,47 @@ class DB:
             row = await cur.fetchone()
             return row[0] if row else 0
 
+    async def count_users_since(self, since_iso: str) -> int:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT COUNT(*) FROM users WHERE created_at >= ?", (since_iso,)
+            )
+            row = await cur.fetchone()
+            return row[0] if row else 0
+
+    async def get_users_page(self, limit: int, offset: int) -> list[tuple]:
+        """Возвращает строки (tg_id, username, first_name, created_at)."""
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT tg_id, username, first_name, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            )
+            return list(await cur.fetchall())
+
+    async def get_all_user_ids(self) -> list[int]:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute("SELECT tg_id FROM users")
+            return [r[0] for r in await cur.fetchall()]
+
+    async def find_user_by_username(self, username: str) -> Optional[tuple]:
+        username = username.lstrip("@")
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT tg_id, username, first_name, created_at FROM users WHERE username = ? COLLATE NOCASE",
+                (username,),
+            )
+            row = await cur.fetchone()
+            return tuple(row) if row else None
+
+    async def get_user(self, tg_id: int) -> Optional[tuple]:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT tg_id, username, first_name, created_at FROM users WHERE tg_id = ?",
+                (tg_id,),
+            )
+            row = await cur.fetchone()
+            return tuple(row) if row else None
+
     # ---------- subscriptions ----------
     async def create_subscription(
         self,
@@ -194,6 +235,41 @@ class DB:
         async with aiosqlite.connect(self.path) as conn:
             await conn.execute("UPDATE subscriptions SET active = 0 WHERE id = ?", (sub_id,))
             await conn.commit()
+
+    async def extend_subscription(self, sub_id: int, new_expires_iso: str) -> None:
+        async with aiosqlite.connect(self.path) as conn:
+            await conn.execute(
+                "UPDATE subscriptions SET expires_at = ?, active = 1 WHERE id = ?",
+                (new_expires_iso, sub_id),
+            )
+            await conn.commit()
+
+    async def list_active_subscriptions(self, limit: int, offset: int) -> list[Subscription]:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT * FROM subscriptions WHERE active = 1 ORDER BY id DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            )
+            rows = await cur.fetchall()
+            return [_row_to_sub(r) for r in rows]
+
+    async def count_active_subscriptions(self) -> int:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT COUNT(*) FROM subscriptions WHERE active = 1 AND expires_at > ?",
+                (now_iso(),),
+            )
+            row = await cur.fetchone()
+            return row[0] if row else 0
+
+    async def count_subscriptions_since(self, since_iso: str) -> int:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT COUNT(*) FROM subscriptions WHERE started_at >= ?",
+                (since_iso,),
+            )
+            row = await cur.fetchone()
+            return row[0] if row else 0
 
     # ---------- payments ----------
     async def create_payment(
@@ -265,6 +341,15 @@ class DB:
         async with aiosqlite.connect(self.path) as conn:
             cur = await conn.execute(
                 "SELECT COUNT(*), COALESCE(SUM(amount_rub), 0) FROM payments WHERE status = 'succeeded'"
+            )
+            row = await cur.fetchone()
+            return (row[0], row[1]) if row else (0, 0)
+
+    async def count_payments_since(self, since_iso: str) -> tuple[int, int]:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(amount_rub), 0) FROM payments WHERE status = 'succeeded' AND created_at >= ?",
+                (since_iso,),
             )
             row = await cur.fetchone()
             return (row[0], row[1]) if row else (0, 0)

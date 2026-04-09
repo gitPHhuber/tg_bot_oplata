@@ -2,6 +2,7 @@ from .start import router as start_router
 from .buy import router as buy_router
 from .profile import router as profile_router
 from .admin import router as admin_router
+from .admin_panel import router as admin_panel_router
 from .support import router as support_router
 
 __all__ = [
@@ -9,5 +10,6 @@ __all__ = [
     "buy_router",
     "profile_router",
     "admin_router",
+    "admin_panel_router",
     "support_router",
 ]

@@ -17,6 +17,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from .config import settings
 from .db import DB
 from .handlers import (
+    admin_panel_router,
     admin_router,
     buy_router,
     profile_router,
@@ -68,13 +69,17 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
     dp.update.middleware(DependenciesMiddleware(db, xui))
     # ВАЖНО: порядок имеет значение.
-    # admin_router принимает команды (/grant, /stats, ...) и должен быть ДО support_router,
-    # потому что support ловит "любое сообщение от админа с reply" — без приоритета
-    # команд он бы поглощал админ-команды, отправленные в reply на чужое сообщение.
+    # 1) start — самый общий /start
+    # 2) admin_panel — inline-меню /admin со своим набором FSM-состояний
+    # 3) admin — старые CLI-команды /grant /stats /revoke /userinfo
+    # 4) buy / profile — пользовательский флоу
+    # 5) support — последним: его catch-all "сообщение от админа с reply"
+    #    не должен перехватывать админ-команды и FSM-состояния админ-панели
     dp.include_router(start_router)
+    dp.include_router(admin_panel_router)
+    dp.include_router(admin_router)
     dp.include_router(buy_router)
     dp.include_router(profile_router)
-    dp.include_router(admin_router)
     dp.include_router(support_router)
 
     scheduler = setup_scheduler(db, xui, bot)

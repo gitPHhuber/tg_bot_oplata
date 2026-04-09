@@ -208,6 +208,23 @@ class XUIClient:
             return None
         return data.get("obj")
 
+    async def get_inbound_client_stats(self, inbound_id: int) -> list[dict]:
+        """Возвращает массив clientStats из инбаунда — содержит email, up, down,
+        enable, expiryTime для всех клиентов одним запросом (быстрее, чем
+        get_client_traffic в цикле).
+        """
+        ib = await self.get_inbound(inbound_id)
+        return ib.get("clientStats") or []
+
+    async def get_server_status(self) -> dict:
+        """Системные метрики самой панели: uptime, memory, cpu, xray status."""
+        try:
+            data = await self._request("POST", "/server/status")
+        except XUIError as e:
+            log.warning("get_server_status failed: %s", e)
+            return {}
+        return data.get("obj") or {}
+
 
 def days_from_now_unix_ms(days: int) -> int:
     """Срок подписки в формате unix-ms (как ждёт xray expiryTime)."""
