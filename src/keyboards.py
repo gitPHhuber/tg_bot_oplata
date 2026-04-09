@@ -98,6 +98,24 @@ def main_inline_back_kb() -> InlineKeyboardMarkup:
     )
 
 
+def about_kb() -> InlineKeyboardMarkup:
+    """Экран «О нас»: кнопки оферты и возврата."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📄 Договор оферты", callback_data="m:offer")],
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="m:home")],
+        ]
+    )
+
+
+def offer_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="m:about")],
+        ]
+    )
+
+
 def referral_share_kb(share_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

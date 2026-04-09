@@ -8,7 +8,13 @@ from aiogram.types import CallbackQuery, Message
 from .. import messages
 from ..config import settings
 from ..db import DB
-from ..keyboards import main_inline_back_kb, main_inline_kb, main_menu_kb
+from ..keyboards import (
+    about_kb,
+    main_inline_back_kb,
+    main_inline_kb,
+    main_menu_kb,
+    offer_kb,
+)
 
 log = logging.getLogger(__name__)
 router = Router(name="start")
@@ -95,9 +101,26 @@ async def cb_howto(cq: CallbackQuery) -> None:
 async def cb_about(cq: CallbackQuery) -> None:
     text = messages.ABOUT_HEADER + settings.about_text
     try:
-        await cq.message.edit_text(text, reply_markup=main_inline_back_kb())
+        await cq.message.edit_text(
+            text, reply_markup=about_kb(), disable_web_page_preview=True
+        )
     except Exception:
-        await cq.message.answer(text, reply_markup=main_inline_back_kb())
+        await cq.message.answer(
+            text, reply_markup=about_kb(), disable_web_page_preview=True
+        )
+    await cq.answer()
+
+
+@router.callback_query(F.data == "m:offer")
+async def cb_offer(cq: CallbackQuery) -> None:
+    try:
+        await cq.message.edit_text(
+            settings.offer_text, reply_markup=offer_kb(), disable_web_page_preview=True
+        )
+    except Exception:
+        await cq.message.answer(
+            settings.offer_text, reply_markup=offer_kb(), disable_web_page_preview=True
+        )
     await cq.answer()
 
 
