@@ -71,6 +71,42 @@ def back_kb() -> InlineKeyboardMarkup:
     )
 
 
+def main_inline_kb(channel_url: str = "") -> InlineKeyboardMarkup:
+    """Главное inline-меню в стиле «бренд». Показывается под /start."""
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="🛒 Купить подписку", callback_data="m:buy")],
+        [
+            InlineKeyboardButton(text="🔐 Моя подписка",     callback_data="m:profile"),
+            InlineKeyboardButton(text="📲 Как подключиться", callback_data="m:howto"),
+        ],
+        [InlineKeyboardButton(text="🤝 Реферальная программа", callback_data="m:ref")],
+    ]
+    third_row: list[InlineKeyboardButton] = []
+    if channel_url:
+        third_row.append(InlineKeyboardButton(text="🌟 Наш канал", url=channel_url))
+    third_row.append(InlineKeyboardButton(text="ℹ️ О нас", callback_data="m:about"))
+    rows.append(third_row)
+    rows.append([InlineKeyboardButton(text="🆘 Помощь", callback_data="m:help")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def main_inline_back_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ В главное меню", callback_data="m:home")]
+        ]
+    )
+
+
+def referral_share_kb(share_url: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📤 Поделиться ссылкой", url=share_url)],
+            [InlineKeyboardButton(text="◀️ В главное меню", callback_data="m:home")],
+        ]
+    )
+
+
 # ---------- админ-панель ----------
 
 def admin_main_kb() -> InlineKeyboardMarkup:

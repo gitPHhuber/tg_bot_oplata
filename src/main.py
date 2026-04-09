@@ -21,6 +21,7 @@ from .handlers import (
     admin_router,
     buy_router,
     profile_router,
+    referral_router,
     start_router,
     support_router,
 )
@@ -80,6 +81,7 @@ async def main() -> None:
     dp.include_router(admin_router)
     dp.include_router(buy_router)
     dp.include_router(profile_router)
+    dp.include_router(referral_router)
     dp.include_router(support_router)
 
     scheduler = setup_scheduler(db, xui, bot)

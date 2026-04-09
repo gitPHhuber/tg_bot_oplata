@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     receipt_email: str = ""
     receipt_description: str = "Доступ к информационному сервису"
 
+    # Brand / контент главного меню
+    channel_url: str = ""           # пустой → кнопка «Наш канал» скрыта
+    about_text: str = (
+        "Atlas — быстрый и стабильный VPN на базе VLESS+Reality.\n"
+        "Маскируется под обычный HTTPS, работает там, где другие уже не открываются."
+    )
+
+    # Реферальная программа
+    referral_bonus_days: int = 7    # сколько дней дарим реферреру за каждого оплатившего реферала
+    referral_enabled: bool = True
+
     # Storage
     db_path: Path = Field(default=Path("data/bot.db"))
 

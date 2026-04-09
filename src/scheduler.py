@@ -10,7 +10,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from . import messages, payments
 from .config import settings
 from .db import DB
-from .services import activate_subscription, deactivate_subscription, format_dt_human
+from .services import (
+    activate_subscription,
+    deactivate_subscription,
+    format_dt_human,
+    process_referral_after_activation,
+)
 from .tariffs import get_tariff
 from .xui_client import XUIClient
 
@@ -61,6 +66,8 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
                 )
             except Exception as e:
                 log.warning("notify user %s failed: %s", p.tg_id, e)
+            # Реферальный бонус — после успешной активации первой оплаты
+            await process_referral_after_activation(db, xui, bot, p.tg_id)
         elif status == "canceled":
             await db.update_payment_status(p.id, "canceled")
 

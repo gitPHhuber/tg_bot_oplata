@@ -7,7 +7,7 @@ from .. import messages, payments
 from ..config import settings
 from ..db import DB
 from ..keyboards import pay_kb, tariffs_kb
-from ..services import activate_subscription
+from ..services import activate_subscription, process_referral_after_activation
 from ..tariffs import get_tariff
 from ..xui_client import XUIClient
 
@@ -20,10 +20,29 @@ async def show_tariffs(msg: Message) -> None:
     if settings.payment_mode == "manual":
         await msg.answer(
             "💳 Платёжный модуль пока не подключён.\n"
-            "Чтобы получить доступ — напиши админу (см. «💬 Поддержка»)."
+            "Чтобы получить доступ — напиши в поддержку."
         )
         return
     await msg.answer(messages.TARIFF_LIST_HEADER, reply_markup=tariffs_kb())
+
+
+@router.callback_query(F.data == "m:buy")
+async def cb_show_tariffs(cq: CallbackQuery) -> None:
+    if settings.payment_mode == "manual":
+        await cq.answer(
+            "Платёжный модуль пока не подключён. Напиши в поддержку.",
+            show_alert=True,
+        )
+        return
+    try:
+        await cq.message.edit_text(
+            messages.TARIFF_LIST_HEADER, reply_markup=tariffs_kb()
+        )
+    except Exception:
+        await cq.message.answer(
+            messages.TARIFF_LIST_HEADER, reply_markup=tariffs_kb()
+        )
+    await cq.answer()
 
 
 @router.callback_query(F.data.startswith("buy:"))
@@ -89,6 +108,7 @@ async def on_check_click(cq: CallbackQuery, db: DB, xui: XUIClient, bot) -> None
                 link=link,
             )
         )
+        await process_referral_after_activation(db, xui, bot, cq.from_user.id)
         return
     if status == "canceled":
         await db.update_payment_status(payment.id, "canceled")

@@ -46,6 +46,7 @@ from ..services import (
     format_dt_human,
     format_traffic,
     format_used,
+    process_referral_after_activation,
 )
 from ..tariffs import TARIFFS, get_tariff
 from ..xui_client import XUIClient
@@ -554,6 +555,7 @@ async def cb_grant_apply(cq: CallbackQuery, db: DB, xui: XUIClient, bot: Bot) ->
         )
     except Exception:
         pass
+    await process_referral_after_activation(db, xui, bot, tg_id)
     await cq.message.edit_text(
         f"✅ Выдана подписка #{sub.id} юзеру <code>{tg_id}</code>: {tariff.title}\n\nКлюч:\n<code>{link}</code>",
         reply_markup=admin_back_kb(),
@@ -665,6 +667,8 @@ async def gift_pick_days(
         amount_rub=0,
         status="manual",
     )
+    # триггер реферального бонуса для пригласившего (если этот gift — первая активация)
+    await process_referral_after_activation(db, xui, bot, target_id)
 
     traffic_label = "без лимита" if traffic_gb == 0 else f"{traffic_gb} GB"
     # Сообщение получателю

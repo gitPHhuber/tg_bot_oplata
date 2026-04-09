@@ -4,6 +4,7 @@ from .profile import router as profile_router
 from .admin import router as admin_router
 from .admin_panel import router as admin_panel_router
 from .support import router as support_router
+from .referral import router as referral_router
 
 __all__ = [
     "start_router",
@@ -12,4 +13,5 @@ __all__ = [
     "admin_router",
     "admin_panel_router",
     "support_router",
+    "referral_router",
 ]

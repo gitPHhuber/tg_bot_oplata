@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+
+import aiosqlite
 
 from .config import settings
 from .db import DB, Subscription
@@ -86,6 +87,86 @@ async def deactivate_subscription(
     except Exception as e:
         log.warning("xui delete_client failed for sub %s: %s", sub.id, e)
     await db.deactivate_subscription(sub.id)
+
+
+async def award_referral_bonus(
+    db: DB,
+    xui: XUIClient,
+    referrer_id: int,
+    days: int,
+) -> tuple[Subscription, bool, str]:
+    """Начислить реферреру бонус: продлить активную подписку на N дней,
+    или создать новую gift-подписку (без лимита трафика).
+
+    Возвращает (subscription, was_extended, vless_link).
+    was_extended=True если продлили, False если создали новую.
+    vless_link непустой только когда создали новую (продление не меняет ключ).
+    """
+    sub = await db.get_active_user_subscription(referrer_id)
+    if sub and not sub.is_expired:
+        updated = await extend_subscription(db, xui, sub, days)
+        return updated, True, ""
+    new_sub, link = await activate_gift_subscription(
+        db, xui, referrer_id, days=days, traffic_gb=0
+    )
+    return new_sub, False, link
+
+
+async def process_referral_after_activation(
+    db: DB,
+    xui: XUIClient,
+    bot,  # aiogram.Bot — прямой импорт здесь не делаем, чтобы избежать циклов
+    new_user_tg_id: int,
+) -> None:
+    """Вызывать ПОСЛЕ db.create_payment() при первой активации.
+    Проверяет, есть ли у нового юзера referrer, и если да — начисляет бонус.
+
+    Идемпотентен: если у юзера уже есть >1 активаций (то есть это не первая),
+    функция тихо ничего не делает.
+    """
+    from . import messages  # local import чтобы не было циклов
+
+    if not settings.referral_enabled:
+        return
+    referrer_id = await db.get_referrer(new_user_tg_id)
+    if not referrer_id:
+        return
+    # Считаем активные/manual платежи юзера. Если != 1 — либо ещё нет записи
+    # (рано вызвали), либо уже была обработка (повторный платёж).
+    cnt = 0
+    async with aiosqlite.connect(db.path) as conn:
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM payments WHERE tg_id = ? AND status IN ('succeeded', 'manual')",
+            (new_user_tg_id,),
+        )
+        row = await cur.fetchone()
+        cnt = row[0] if row else 0
+    if cnt != 1:
+        return  # либо ещё нет записи (рано вызвали), либо уже была — повторный платёж
+
+    days = settings.referral_bonus_days
+    try:
+        sub, extended, link = await award_referral_bonus(db, xui, referrer_id, days)
+    except Exception as e:
+        log.warning("referral bonus for %s failed: %s", referrer_id, e)
+        return
+
+    # Уведомляем реферрера
+    if extended:
+        outcome = messages.REFERRAL_BONUS_EXTENDED.format(
+            expires=format_dt_human(sub.expires_at)
+        )
+    else:
+        outcome = messages.REFERRAL_BONUS_NEW.format(
+            expires=format_dt_human(sub.expires_at), link=link
+        )
+    text = messages.REFERRAL_BONUS_NOTIFY.format(
+        friend_id=new_user_tg_id, days=days, outcome=outcome
+    )
+    try:
+        await bot.send_message(referrer_id, text)
+    except Exception as e:
+        log.warning("notify referrer %s failed: %s", referrer_id, e)
 
 
 async def extend_subscription(

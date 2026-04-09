@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS users (
     tg_id        INTEGER PRIMARY KEY,
     username     TEXT,
     first_name   TEXT,
-    created_at   TEXT NOT NULL
+    created_at   TEXT NOT NULL,
+    referrer_id  INTEGER          -- кто пригласил (NULL если зашёл сам)
 );
 
 CREATE TABLE IF NOT EXISTS subscriptions (
@@ -56,6 +57,8 @@ CREATE TABLE IF NOT EXISTS support_threads (
     PRIMARY KEY (admin_chat_id, admin_msg_id)
 );
 CREATE INDEX IF NOT EXISTS idx_support_user ON support_threads(user_tg_id);
+
+CREATE INDEX IF NOT EXISTS idx_users_referrer ON users(referrer_id);
 """
 
 
@@ -115,7 +118,18 @@ class DB:
             await conn.execute("PRAGMA synchronous=NORMAL")
             await conn.execute("PRAGMA foreign_keys=ON")
             await conn.executescript(SCHEMA)
+            # Идемпотентные миграции для существующих БД, где CREATE TABLE
+            # уже отработал без новых колонок.
+            await self._migrate(conn)
             await conn.commit()
+
+    async def _migrate(self, conn) -> None:
+        """Безопасные ALTER'ы для добавления колонок, появившихся после первого
+        релиза. SQLite-friendly: только ADD COLUMN, без изменения существующих."""
+        cur = await conn.execute("PRAGMA table_info(users)")
+        cols = {row[1] for row in await cur.fetchall()}
+        if "referrer_id" not in cols:
+            await conn.execute("ALTER TABLE users ADD COLUMN referrer_id INTEGER")
 
     # ---------- users ----------
     async def upsert_user(self, tg_id: int, username: str | None, first_name: str | None) -> None:
@@ -176,6 +190,72 @@ class DB:
             )
             row = await cur.fetchone()
             return tuple(row) if row else None
+
+    # ---------- referrals ----------
+    async def set_referrer_if_empty(self, tg_id: int, referrer_id: int) -> bool:
+        """Сохранить кто пригласил юзера. Только если у него ещё нет referrer'а
+        и referrer != сам себе. Возвращает True если установлено."""
+        if tg_id == referrer_id:
+            return False
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT referrer_id FROM users WHERE tg_id = ?", (tg_id,)
+            )
+            row = await cur.fetchone()
+            if row is None or row[0] is not None:
+                return False
+            # убеждаемся что referrer существует
+            cur2 = await conn.execute(
+                "SELECT 1 FROM users WHERE tg_id = ?", (referrer_id,)
+            )
+            if not await cur2.fetchone():
+                return False
+            await conn.execute(
+                "UPDATE users SET referrer_id = ? WHERE tg_id = ?",
+                (referrer_id, tg_id),
+            )
+            await conn.commit()
+            return True
+
+    async def get_referrer(self, tg_id: int) -> Optional[int]:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT referrer_id FROM users WHERE tg_id = ?", (tg_id,)
+            )
+            row = await cur.fetchone()
+            return int(row[0]) if row and row[0] is not None else None
+
+    async def count_referrals(self, referrer_id: int) -> int:
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT COUNT(*) FROM users WHERE referrer_id = ?", (referrer_id,)
+            )
+            row = await cur.fetchone()
+            return row[0] if row else 0
+
+    async def count_paid_referrals(self, referrer_id: int) -> int:
+        """Сколько приведённых юзеров уже совершили хотя бы 1 успешный платёж."""
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                """SELECT COUNT(DISTINCT u.tg_id)
+                   FROM users u
+                   JOIN payments p ON p.tg_id = u.tg_id
+                   WHERE u.referrer_id = ? AND p.status = 'succeeded'""",
+                (referrer_id,),
+            )
+            row = await cur.fetchone()
+            return row[0] if row else 0
+
+    async def is_first_activation(self, tg_id: int) -> bool:
+        """True, если у юзера ещё нет ни одной активации (любого типа). Используется
+        для триггера реферального бонуса — должен вызываться ДО create_payment."""
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT COUNT(*) FROM payments WHERE tg_id = ? AND status IN ('succeeded', 'manual')",
+                (tg_id,),
+            )
+            row = await cur.fetchone()
+            return (row[0] if row else 0) == 0
 
     # ---------- subscriptions ----------
     async def create_subscription(
