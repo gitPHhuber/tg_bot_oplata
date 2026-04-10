@@ -115,31 +115,36 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
 
 
 async def check_expiring_subscriptions(db: DB, xui: XUIClient, bot: Bot) -> None:
-    """Уведомляем за 24 часа до истечения, отрубаем после."""
+    """Два прохода:
+    1) Подписки, которые УЖЕ истекли → деактивировать + один NOTIFY_EXPIRED.
+    2) Подписки, которые истекают в ближайшие 24ч И ещё не уведомлены →
+       один NOTIFY_EXPIRING_SOON + mark_notified_expiring (больше не пишем).
+    """
     now = datetime.now(timezone.utc)
-    soon = now + timedelta(hours=24)
-    soon_iso = soon.isoformat()
+    now_iso = now.isoformat()
+    soon_iso = (now + timedelta(hours=24)).isoformat()
 
-    expiring = await db.get_expiring_subscriptions(soon_iso)
-    for sub in expiring:
-        if sub.is_expired:
-            try:
-                await deactivate_subscription(db, xui, sub)
-                await bot.send_message(sub.tg_id, messages.NOTIFY_EXPIRED)
-                log.info("sub %s expired and revoked", sub.id)
-            except Exception as e:
-                log.warning("expire sub %s failed: %s", sub.id, e)
-        else:
-            # Уведомление за 24ч (без флага «уже уведомлён» — отправится 1-2 раза, нестрашно)
-            try:
-                await bot.send_message(
-                    sub.tg_id,
-                    messages.NOTIFY_EXPIRING_SOON.format(
-                        when=format_dt_human(sub.expires_at)
-                    ),
-                )
-            except Exception as e:
-                log.warning("notify expiring sub %s failed: %s", sub.id, e)
+    # 1. Истёкшие → деактивация (delete из xui + active=0 в БД)
+    for sub in await db.get_expired_active(now_iso):
+        try:
+            await deactivate_subscription(db, xui, sub)
+            await bot.send_message(sub.tg_id, messages.NOTIFY_EXPIRED)
+            log.info("sub %s expired and revoked", sub.id)
+        except Exception as e:
+            log.warning("expire sub %s failed: %s", sub.id, e)
+
+    # 2. Скоро истекающие → одно уведомление (без повторов)
+    for sub in await db.get_expiring_unnotified(now_iso, soon_iso):
+        try:
+            await bot.send_message(
+                sub.tg_id,
+                messages.NOTIFY_EXPIRING_SOON.format(
+                    when=format_dt_human(sub.expires_at)
+                ),
+            )
+            await db.mark_notified_expiring(sub.id)
+        except Exception as e:
+            log.warning("notify expiring sub %s failed: %s", sub.id, e)
 
 
 def setup_scheduler(db: DB, xui: XUIClient, bot: Bot) -> AsyncIOScheduler:

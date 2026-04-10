@@ -154,6 +154,13 @@ class DB:
             await conn.execute(
                 "ALTER TABLE users ADD COLUMN trial_used INTEGER NOT NULL DEFAULT 0"
             )
+        # subscriptions.notified_expiring — чтобы не спамить "скоро истекает"
+        cur_s = await conn.execute("PRAGMA table_info(subscriptions)")
+        scols = {row[1] for row in await cur_s.fetchall()}
+        if "notified_expiring" not in scols:
+            await conn.execute(
+                "ALTER TABLE subscriptions ADD COLUMN notified_expiring INTEGER NOT NULL DEFAULT 0"
+            )
         # payments.promo_id для отложенного списания промо-использования
         cur2 = await conn.execute("PRAGMA table_info(payments)")
         pcols = {row[1] for row in await cur2.fetchall()}
@@ -418,6 +425,39 @@ class DB:
             )
             rows = await cur.fetchall()
             return [_row_to_sub(r) for r in rows]
+
+    async def get_expired_active(self, now_iso: str) -> list[Subscription]:
+        """Подписки, у которых active=1, но expires_at уже прошло → надо деактивировать."""
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                "SELECT * FROM subscriptions WHERE active = 1 AND expires_at <= ?",
+                (now_iso,),
+            )
+            rows = await cur.fetchall()
+            return [_row_to_sub(r) for r in rows]
+
+    async def get_expiring_unnotified(self, now_iso: str, before_iso: str) -> list[Subscription]:
+        """Подписки, которые ещё не истекли, но истекут до before_iso,
+        и ещё не получали уведомление."""
+        async with aiosqlite.connect(self.path) as conn:
+            cur = await conn.execute(
+                """SELECT * FROM subscriptions
+                   WHERE active = 1
+                     AND expires_at > ?
+                     AND expires_at <= ?
+                     AND (notified_expiring IS NULL OR notified_expiring = 0)""",
+                (now_iso, before_iso),
+            )
+            rows = await cur.fetchall()
+            return [_row_to_sub(r) for r in rows]
+
+    async def mark_notified_expiring(self, sub_id: int) -> None:
+        async with aiosqlite.connect(self.path) as conn:
+            await conn.execute(
+                "UPDATE subscriptions SET notified_expiring = 1 WHERE id = ?",
+                (sub_id,),
+            )
+            await conn.commit()
 
     async def deactivate_subscription(self, sub_id: int) -> None:
         async with aiosqlite.connect(self.path) as conn:
