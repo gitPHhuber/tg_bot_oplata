@@ -9,7 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from .. import messages, payments
 from ..config import settings
 from ..db import DB
-from ..keyboards import pay_kb, tariffs_kb
+from ..keyboards import main_inline_back_kb, pay_kb, tariffs_kb
 from ..services import activate_subscription, process_referral_after_activation
 from ..tariffs import get_tariff
 from ..xui_client import XUIClient
@@ -96,22 +96,27 @@ async def promo_apply(msg: Message, state: FSMContext, db: DB) -> None:
     code = (msg.text or "").strip().upper()
     promo = await db.get_promocode(code)
     if not promo:
-        await msg.answer(messages.PROMO_INVALID)
+        await state.clear()
+        await msg.answer(messages.PROMO_INVALID, reply_markup=main_inline_back_kb())
         return
     pid, pcode, kind, value, max_uses, used_count, expires_at, enabled = promo
     if not enabled:
-        await msg.answer(messages.PROMO_DISABLED)
+        await state.clear()
+        await msg.answer(messages.PROMO_DISABLED, reply_markup=main_inline_back_kb())
         return
     if max_uses and used_count >= max_uses:
-        await msg.answer(messages.PROMO_USED_OUT)
+        await state.clear()
+        await msg.answer(messages.PROMO_USED_OUT, reply_markup=main_inline_back_kb())
         return
     if expires_at:
         from datetime import datetime, timezone
         if datetime.fromisoformat(expires_at) < datetime.now(timezone.utc):
-            await msg.answer(messages.PROMO_EXPIRED)
+            await state.clear()
+            await msg.answer(messages.PROMO_EXPIRED, reply_markup=main_inline_back_kb())
             return
     if await db.is_promo_used_by(pid, msg.from_user.id):
-        await msg.answer(messages.PROMO_USED_BY_YOU)
+        await state.clear()
+        await msg.answer(messages.PROMO_USED_BY_YOU, reply_markup=main_inline_back_kb())
         return
 
     # Сохраним в state до момента покупки
@@ -194,7 +199,7 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
     pending = await db.get_pending_payments()
     user_pending = [p for p in pending if p.tg_id == cq.from_user.id]
     if not user_pending:
-        await cq.answer("Активных платежей нет. Жми «Купить» снова.", show_alert=True)
+        await cq.answer("Активных платежей нет. Создай новый через «🛒 Купить подписку».", show_alert=True)
         return
 
     payment = user_pending[-1]  # последний созданный
@@ -258,7 +263,7 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
         return
     if status == "canceled":
         await db.update_payment_status(payment.id, "canceled")
-        await cq.answer("Платёж отменён", show_alert=True)
+        await cq.answer("Платёж отменён или просрочен. Создай новый через «🛒 Купить подписку».", show_alert=True)
         return
 
     await cq.answer("Платёж ещё не оплачен. Попробуй через 10-30 секунд после оплаты.", show_alert=True)
@@ -266,5 +271,5 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
 
 @router.callback_query(F.data == "cancel")
 async def on_cancel(cq: CallbackQuery) -> None:
-    await cq.message.edit_text("Отменено.")
+    await cq.message.edit_text("Отменено.", reply_markup=main_inline_back_kb())
     await cq.answer()

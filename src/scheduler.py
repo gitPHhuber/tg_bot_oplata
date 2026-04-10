@@ -49,12 +49,16 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
                 log.warning("payment %s: tariff %s not found", p.id, p.tariff_code)
                 await db.update_payment_status(p.id, "canceled")
                 continue
+            # Помечаем как processing, чтобы on_check_click не активировал параллельно
+            await db.update_payment_status(p.id, "processing")
             # Кому активируем: если есть recipient — это gift, иначе самому покупателю
             beneficiary_id = p.recipient_tg_id or p.tg_id
             try:
                 sub, link = await activate_subscription(db, xui, beneficiary_id, tariff)
             except Exception as e:
                 log.exception("activate failed for payment %s: %s", p.id, e)
+                # Откатываем статус обратно, чтобы следующий poll мог повторить
+                await db.update_payment_status(p.id, "pending")
                 continue
             await db.update_payment_status(p.id, "succeeded", sub.id)
             # Списываем промо если был использован

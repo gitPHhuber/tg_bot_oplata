@@ -8,6 +8,7 @@
    шлёт текст обратно юзеру
 """
 import logging
+from html import escape as html_escape
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -115,7 +116,7 @@ async def admin_reply_to_user(msg: Message, db: DB, bot: Bot) -> None:
         if text:
             await bot.send_message(
                 user_tg_id,
-                messages.SUPPORT_REPLY_TO_USER.format(text=text),
+                messages.SUPPORT_REPLY_TO_USER.format(text=html_escape(text)),
             )
         else:
             # Если нет текста (фото/voice/документ) — копируем как есть

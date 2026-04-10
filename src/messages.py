@@ -202,11 +202,7 @@ SUPPORT_SENT = (
 
 SUPPORT_CANCELED = "Окей, отменил."
 
-SUPPORT_INCOMING_HEADER = (
-    "💬 <b>Новый вопрос в поддержку</b>\n"
-    "От: {user_link} (<code>{tg_id}</code>)\n\n"
-    "Чтобы ответить — сделай <b>reply</b> на следующее сообщение."
-)
+SUPPORT_INCOMING_HEADER = "💬 От {user_link} (<code>{tg_id}</code>) — сделай reply на сообщение ниже:"
 
 SUPPORT_REPLY_TO_USER = "✉️ <b>Ответ от поддержки:</b>\n\n{text}"
 

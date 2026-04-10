@@ -76,8 +76,6 @@ async def cmd_start(
         await msg.answer(
             messages.WELCOME.format(name=name, users_count=users_count),
         )
-        if trial_ok:
-            await msg.answer(messages.WELCOME_NEW_USER_HINT)
 
     # Inline главное меню — основной интерфейс
     await msg.answer(

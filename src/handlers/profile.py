@@ -60,6 +60,7 @@ async def _build_profile_view(tg_id: int, db: DB, xui: XUIClient) -> tuple[str, 
     # Трафик из xui (best-effort)
     used_bytes = 0
     traffic_data = await xui.get_client_traffic(sub.xui_email)
+    traffic_unavailable = traffic_data is None
     if traffic_data:
         used_bytes = (traffic_data.get("up", 0) or 0) + (traffic_data.get("down", 0) or 0)
 
@@ -73,12 +74,13 @@ async def _build_profile_view(tg_id: int, db: DB, xui: XUIClient) -> tuple[str, 
 
     dl = days_left(sub.expires_at)
     link = build_vless_link(sub.xui_uuid, remark=f"Atlas-{sub.tariff_code}")
+    used_str = "⚠️ данные временно недоступны" if traffic_unavailable else format_bytes(used_bytes)
     text = messages.PROFILE_ACTIVE.format(
         tariff_title=_tariff_title(sub.tariff_code),
         status_emoji=status_emoji_for_days(dl),
         days_left_str=days_left_str(sub.expires_at),
         expires=format_dt_human(sub.expires_at),
-        used_str=format_bytes(used_bytes),
+        used_str=used_str,
         total_str=total_str,
         progress_bar=bar,
         history=history_str,
@@ -105,11 +107,15 @@ async def show_profile(msg: Message, db: DB, xui: XUIClient) -> None:
 
 
 @router.callback_query(F.data == "p:copy")
-async def cb_copy_key(cq: CallbackQuery) -> None:
-    """В TG нельзя автоматически копировать в clipboard из бота, но можно
-    показать алерт-подсказку. Сам код в сообщении уже в <code>...</code> —
-    тап по нему в TG копирует."""
-    await cq.answer(messages.KEY_COPIED_ALERT, show_alert=True)
+async def cb_copy_key(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
+    """Отправляем ключ отдельным сообщением без форматирования —
+    в TG на мобиле такое сообщение копируется целиком одним тапом."""
+    _text, link, has_active = await _build_profile_view(cq.from_user.id, db, xui)
+    if not has_active or not link:
+        await cq.answer("Нет активной подписки", show_alert=True)
+        return
+    await cq.message.answer(link, parse_mode=None)
+    await cq.answer("Ключ отправлен ниже — нажми на него, чтобы скопировать")
 
 
 @router.callback_query(F.data == "p:qr")
