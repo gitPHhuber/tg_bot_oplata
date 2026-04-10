@@ -10,6 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from . import messages, payments
 from .config import settings
 from .db import DB
+from .keyboards import renew_kb
 from .services import (
     activate_subscription,
     deactivate_subscription,
@@ -132,7 +133,7 @@ async def check_expiring_subscriptions(db: DB, xui: XUIClient, bot: Bot) -> None
     for sub in await db.get_expired_active(now_iso):
         try:
             await deactivate_subscription(db, xui, sub)
-            await bot.send_message(sub.tg_id, messages.NOTIFY_EXPIRED)
+            await bot.send_message(sub.tg_id, messages.NOTIFY_EXPIRED, reply_markup=renew_kb())
             log.info("sub %s expired and revoked", sub.id)
         except Exception as e:
             log.warning("expire sub %s failed: %s", sub.id, e)
@@ -145,6 +146,7 @@ async def check_expiring_subscriptions(db: DB, xui: XUIClient, bot: Bot) -> None
                 messages.NOTIFY_EXPIRING_SOON.format(
                     when=format_dt_human(sub.expires_at)
                 ),
+                reply_markup=renew_kb(),
             )
             await db.mark_notified_expiring(sub.id)
         except Exception as e:

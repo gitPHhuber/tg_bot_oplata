@@ -10,6 +10,16 @@ from . import messages
 from .tariffs import TARIFFS, Tariff
 
 
+def renew_kb() -> InlineKeyboardMarkup:
+    """Кнопки под уведомлением об истечении подписки."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🛒 Продлить подписку", callback_data="m:buy")],
+            [InlineKeyboardButton(text="🔐 Моя подписка", callback_data="m:profile")],
+        ]
+    )
+
+
 def admin_reply_kb() -> ReplyKeyboardMarkup:
     """Reply-клавиатура только для админов с быстрыми кнопками админки."""
     return ReplyKeyboardMarkup(
