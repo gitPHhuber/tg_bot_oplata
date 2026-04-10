@@ -58,18 +58,20 @@ async def gift_pick_recipient(
     q = (msg.text or "").strip()
     target_id: int | None = None
     target_name: str | None = None
+    user_row = None
     if q.isdigit():
         target_id = int(q)
-        row = await db.get_user(target_id)
-        if row:
-            target_name = row[2] or (f"@{row[1]}" if row[1] else f"ID {target_id}")
+        user_row = await db.get_user(target_id)
+        if user_row:
+            target_name = user_row[2] or (f"@{user_row[1]}" if user_row[1] else f"ID {target_id}")
     elif q.startswith("@"):
         row = await db.find_user_by_username(q)
         if row:
             target_id = int(row[0])
             target_name = row[2] or row[1] or f"ID {target_id}"
+            user_row = row  # already confirmed user exists
 
-    if target_id is None or not await db.get_user(target_id):
+    if target_id is None or not user_row:
         me = await bot.get_me()
         await msg.answer(
             messages.GIFT_FRIEND_NOT_FOUND.format(

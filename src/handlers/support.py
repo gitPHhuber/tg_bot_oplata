@@ -100,8 +100,6 @@ def _is_admin_private_reply(msg: Message) -> bool:
 
 @router.message(F.func(_is_admin_private_reply))
 async def admin_reply_to_user(msg: Message, db: DB, bot: Bot) -> None:
-    if not msg.reply_to_message:
-        return
     user_tg_id = await db.find_support_user(
         admin_chat_id=msg.chat.id,
         admin_msg_id=msg.reply_to_message.message_id,

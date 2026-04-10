@@ -22,5 +22,8 @@ TARIFFS: list[Tariff] = [
 ]
 
 
+_TARIFF_MAP: dict[str, Tariff] = {t.code: t for t in TARIFFS}
+
+
 def get_tariff(code: str) -> Tariff | None:
-    return next((t for t in TARIFFS if t.code == code), None)
+    return _TARIFF_MAP.get(code)
