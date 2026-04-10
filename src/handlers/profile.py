@@ -130,7 +130,16 @@ async def cb_qr_key(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
         photo=photo,
         caption=(
             "📲 <b>QR-код твоего ключа</b>\n\n"
-            "Открой Hiddify на телефоне → «+» → «Сканировать QR» → наведи камеру."
+            "<b>iPhone:</b>\n"
+            "• <b>Streisand</b> (бесплатно) → «+» → «QR-код»\n"
+            "• <b>Shadowrocket</b> → сканер в левом верхнем углу\n"
+            "• <b>Hiddify</b> → «+» → «Сканировать QR»\n\n"
+            "<b>Android:</b>\n"
+            "• <b>Hiddify</b> → «+» → «Сканировать QR»\n"
+            "• <b>v2rayNG</b> → «+» → «Импорт из QR-кода»\n"
+            "• <b>NekoBox</b> → «+» → «QR-код»\n\n"
+            "<b>ПК / ноутбук:</b>\n"
+            "• Отсканируй QR камерой телефона с экрана ноутбука"
         ),
         reply_markup=main_inline_back_kb(),
     )

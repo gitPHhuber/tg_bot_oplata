@@ -10,7 +10,7 @@ from .. import messages, payments
 from ..config import settings
 from ..db import DB
 from ..keyboards import main_inline_back_kb, pay_kb, tariffs_kb
-from ..services import activate_subscription, process_referral_after_activation
+from ..services import activate_subscription, format_dt_human, process_referral_after_activation
 from ..tariffs import get_tariff
 from ..xui_client import XUIClient
 
@@ -209,6 +209,12 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
 
     status = await payments.get_payment_status(payment.yk_id)
     if status == "succeeded":
+        # Re-read to guard against race with scheduler
+        fresh_payments = await db.get_pending_payments()
+        fresh = next((pp for pp in fresh_payments if pp.id == payment.id and pp.status == "pending"), None)
+        if not fresh:
+            await cq.answer("Платёж уже обработан", show_alert=True)
+            return
         tariff = get_tariff(payment.tariff_code)
         if not tariff:
             await cq.answer("Тариф удалён, обратись в поддержку", show_alert=True)
@@ -238,7 +244,7 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                     messages.GIFT_RECEIVED_FROM_FRIEND.format(
                         from_name=buyer_name,
                         tariff_title=tariff.title,
-                        expires=sub.expires_at[:16].replace("T", " ") + " UTC",
+                        expires=format_dt_human(sub.expires_at),
                         link=link,
                     ),
                 )
@@ -248,14 +254,14 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                 messages.GIFT_DELIVERED_TO_BUYER.format(
                     recipient_id=payment.recipient_tg_id,
                     tariff_title=tariff.title,
-                    expires=sub.expires_at[:16].replace("T", " ") + " UTC",
+                    expires=format_dt_human(sub.expires_at),
                 )
             )
         else:
             await cq.message.edit_text(
                 messages.PAYMENT_SUCCESS.format(
                     tariff_title=tariff.title,
-                    expires=sub.expires_at[:16].replace("T", " ") + " UTC",
+                    expires=format_dt_human(sub.expires_at),
                     link=link,
                 )
             )

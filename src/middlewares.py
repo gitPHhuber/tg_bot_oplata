@@ -58,4 +58,8 @@ class ThrottlingMiddleware(BaseMiddleware):
                         pass
                 return None
             self._last[from_user.id] = now
+            # Prune old entries to prevent memory leak
+            if len(self._last) > 5000:
+                cutoff = now - 60
+                self._last = {k: v for k, v in self._last.items() if v > cutoff}
         return await handler(event, data)

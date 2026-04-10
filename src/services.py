@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import uuid as uuid_lib
 from datetime import datetime, timedelta, timezone
 
 import aiosqlite
@@ -47,9 +48,7 @@ async def activate_subscription(
 ) -> tuple[Subscription, str]:
     """Создать клиента в 3x-ui + запись в БД. Возвращает (subscription, vless-link)."""
     # уникальный email = идентификатор клиента в xray
-    existing_subs = await db.get_user_subscriptions(tg_id)
-    serial = len(existing_subs) + 1
-    email = f"tg-{tg_id}-{serial}"
+    email = f"tg-{tg_id}-{uuid_lib.uuid4().hex[:8]}"
 
     expiry_ms = days_from_now_unix_ms(tariff.days)
 

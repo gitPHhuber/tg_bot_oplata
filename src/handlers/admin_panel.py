@@ -361,12 +361,13 @@ async def _show_user_card(target: Message, tg_id: int, db: DB, xui: XUIClient, e
     ]
     if active_subs:
         lines.append("")
+        # Один запрос вместо N
+        all_stats = await xui.get_inbound_client_stats(settings.xui_inbound_id)
+        stats_by_email = {s.get("email"): s for s in all_stats}
         for s in active_subs[:5]:
-            traffic_data = await xui.get_client_traffic(s.xui_email)
-            used = "—"
-            if traffic_data:
-                used_b = (traffic_data.get("up", 0) or 0) + (traffic_data.get("down", 0) or 0)
-                used = format_used(used_b)
+            cs = stats_by_email.get(s.xui_email) or {}
+            used_b = (cs.get("up", 0) or 0) + (cs.get("down", 0) or 0)
+            used = format_used(used_b) if used_b else "0 B"
             tariff = get_tariff(s.tariff_code)
             ttl = tariff.title if tariff else s.tariff_code
             lines.append(
