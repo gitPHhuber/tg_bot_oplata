@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.15)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle with purple gradient -->
+  <circle cx="256" cy="256" r="256" fill="url(#bg)"/>
+
+  <!-- Subtle top shine -->
+  <ellipse cx="256" cy="180" rx="200" ry="160" fill="url(#shine)"/>
+
+  <!-- Stylized "A" — geometric, bold, modern -->
+  <g transform="translate(256, 280)" fill="white">
+    <!-- Left leg -->
+    <polygon points="-100,90 -30,90 30,-130 -20,-130"/>
+    <!-- Right leg -->
+    <polygon points="100,90 30,90 -30,-130 20,-130"/>
+    <!-- Crossbar (slightly elevated for modern look) -->
+    <rect x="-55" y="15" width="110" height="32" rx="4"/>
+  </g>
+
+  <!-- Small shield accent at top of A -->
+  <g transform="translate(256, 130)">
+    <path d="M0-25 C-30-25 -35-10 -35,5 C-35,25 0,40 0,40 C0,40 35,25 35,5 C35-10 30-25 0-25Z"
+          fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="4"/>
+    <!-- Lock/keyhole dot inside shield -->
+    <circle cx="0" cy="5" r="6" fill="rgba(255,255,255,0.8)"/>
+  </g>
+</svg>
