@@ -79,16 +79,27 @@ class XUIClient:
             log.info("xui: logged in as %s", self.username)
 
     async def _request(self, method: str, path: str, **kwargs) -> dict[str, Any]:
-        """JSON-запрос с авто-релогином при потере сессии."""
+        """JSON-запрос с авто-релогином при потере сессии.
+
+        На ЛЮБОЙ non-JSON ответ (пустое тело, HTML, redirect) — re-login
+        и повтор. Раньше проверяли "login" in text, но пустой ответ
+        (протухший cookie) это не ловил.
+        """
         session = await self._ensure_session()
         url = f"{self.panel_url}{path}"
         for attempt in range(2):
             async with session.request(method, url, **kwargs) as r:
                 text = await r.text()
+                # Non-2xx — скорее всего сессия протухла
+                if r.status >= 400 and attempt == 0:
+                    log.warning("xui: got %s on %s, re-login", r.status, path)
+                    await self.login()
+                    continue
                 try:
                     data = json.loads(text)
                 except json.JSONDecodeError:
-                    if "login" in text.lower() and attempt == 0:
+                    if attempt == 0:
+                        log.warning("xui: non-json on %s (len=%d), re-login", path, len(text))
                         await self.login()
                         continue
                     raise XUIError(f"non-json response: {text[:200]}")
