@@ -14,7 +14,7 @@ import aiosqlite
 from .config import settings
 from .db import DB, Subscription
 from .tariffs import Tariff, get_tariff
-from .vless_link import build_vless_link
+from .vless_link import build_primary_link
 from .xui_client import XUIClient, days_from_now_unix_ms
 
 log = logging.getLogger(__name__)
@@ -49,6 +49,9 @@ async def activate_subscription(
     """Создать клиента в 3x-ui + запись в БД. Возвращает (subscription, vless-link)."""
     # уникальный email = идентификатор клиента в xray
     email = f"tg-{tg_id}-{uuid_lib.uuid4().hex[:8]}"
+    # токен для https-subscription URL (Happ one-tap). Отдельный от UUID
+    # клиента — subId в xray может быть произвольной строкой.
+    sub_token = uuid_lib.uuid4().hex[:16]
 
     expiry_ms = days_from_now_unix_ms(tariff.days)
 
@@ -58,23 +61,25 @@ async def activate_subscription(
         total_gb=tariff.traffic_gb,
         expiry_unix_ms=expiry_ms,
         limit_ip=tariff.limit_ip,
+        sub_id=sub_token,
     )
 
     expires_iso = datetime.fromtimestamp(expiry_ms / 1000, tz=timezone.utc).isoformat()
-    sub_id = await db.create_subscription(
+    db_sub_id = await db.create_subscription(
         tg_id=tg_id,
         xui_uuid=client_uuid,
         xui_email=email,
         tariff_code=tariff.code,
         expires_at=expires_iso,
         traffic_gb=tariff.traffic_gb,
+        sub_id=sub_token,
     )
-    sub = await db.get_subscription(sub_id)
+    sub = await db.get_subscription(db_sub_id)
     assert sub is not None
     if tariff.code == "trial_50":
         await db.mark_trial_used(tg_id)
-    link = build_vless_link(client_uuid, remark=f"VPN-{tariff.code}")
-    log.info("activated sub %s for tg=%s tariff=%s", sub_id, tg_id, tariff.code)
+    link = build_primary_link(sub_token, client_uuid, remark=f"Atlas-{tariff.code}")
+    log.info("activated sub %s for tg=%s tariff=%s", db_sub_id, tg_id, tariff.code)
     return sub, link
 
 
@@ -194,6 +199,7 @@ async def extend_subscription(
         expiry_unix_ms=new_expires_ms,
         enable=True,
         limit_ip=limit_ip,
+        sub_id=sub.sub_id,
     )
     await db.extend_subscription(sub.id, new_expires_iso)
     updated = await db.get_subscription(sub.id)

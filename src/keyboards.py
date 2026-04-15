@@ -64,6 +64,32 @@ def tariffs_kb(promo_label: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+HAPP_IOS_URL = "https://apps.apple.com/app/happ-proxy-utility/id6504287215"
+HAPP_ANDROID_URL = "https://play.google.com/store/apps/details?id=com.happproxy"
+
+
+def install_kb(happ_deeplink: str) -> InlineKeyboardMarkup:
+    """Клавиатура для one-tap импорта профиля в Happ.
+    Порядок важен: сначала предлагаем скачать приложение (если ещё нет),
+    потом кнопка активации. Большая кнопка Happ-deeplink — единственная
+    url-кнопка; открытие в TG триггерит системный intent с happ://."""
+    rows: list[list[InlineKeyboardButton]] = []
+    rows.append(
+        [
+            InlineKeyboardButton(text="📥 Happ · iOS",     url=HAPP_IOS_URL),
+            InlineKeyboardButton(text="📥 Happ · Android", url=HAPP_ANDROID_URL),
+        ]
+    )
+    if happ_deeplink:
+        rows.append(
+            [InlineKeyboardButton(text="🔗 Активировать профиль", url=happ_deeplink)]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="◀️ В главное меню", callback_data="m:home")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def pay_kb(url: str, tariff_code: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -135,10 +161,22 @@ def gift_tariffs_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def profile_kb(has_active_sub: bool) -> InlineKeyboardMarkup:
-    """Действия в карточке моей подписки."""
+def profile_kb(has_active_sub: bool, happ_deeplink: str = "") -> InlineKeyboardMarkup:
+    """Действия в карточке моей подписки.
+    happ_deeplink (если задан) — добавляет 3 кнопки для one-tap импорта в Happ
+    в самом верху (Happ iOS / Happ Android / Активировать профиль)."""
     rows: list[list[InlineKeyboardButton]] = []
     if has_active_sub:
+        if happ_deeplink:
+            rows.append(
+                [
+                    InlineKeyboardButton(text="📥 Happ · iOS",     url=HAPP_IOS_URL),
+                    InlineKeyboardButton(text="📥 Happ · Android", url=HAPP_ANDROID_URL),
+                ]
+            )
+            rows.append(
+                [InlineKeyboardButton(text="🔗 Активировать профиль", url=happ_deeplink)]
+            )
         rows.append(
             [
                 InlineKeyboardButton(text="📋 Скопировать ключ", callback_data="p:copy"),

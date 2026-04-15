@@ -99,6 +99,7 @@ class Subscription:
     expires_at: str
     traffic_gb: int
     active: bool
+    sub_id: str = ""  # token subscription URL: sub_base_url + sub_id → HTTPS sub
 
     @property
     def expires_dt(self) -> datetime:
@@ -160,6 +161,13 @@ class DB:
         if "notified_expiring" not in scols:
             await conn.execute(
                 "ALTER TABLE subscriptions ADD COLUMN notified_expiring INTEGER NOT NULL DEFAULT 0"
+            )
+        if "sub_id" not in scols:
+            # Токен для https-subscription URL (Happ one-tap deeplink).
+            # Пусто у legacy-подписок — в этом случае profile/buy fallback-ятся
+            # на старую vless:// ссылку через build_vless_link.
+            await conn.execute(
+                "ALTER TABLE subscriptions ADD COLUMN sub_id TEXT NOT NULL DEFAULT ''"
             )
         # payments.promo_id для отложенного списания промо-использования
         cur2 = await conn.execute("PRAGMA table_info(payments)")
@@ -381,13 +389,14 @@ class DB:
         tariff_code: str,
         expires_at: str,
         traffic_gb: int,
+        sub_id: str = "",
     ) -> int:
         async with aiosqlite.connect(self.path) as conn:
             cur = await conn.execute(
                 """INSERT INTO subscriptions
-                   (tg_id, xui_uuid, xui_email, tariff_code, started_at, expires_at, traffic_gb, active)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
-                (tg_id, xui_uuid, xui_email, tariff_code, now_iso(), expires_at, traffic_gb),
+                   (tg_id, xui_uuid, xui_email, tariff_code, started_at, expires_at, traffic_gb, active, sub_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+                (tg_id, xui_uuid, xui_email, tariff_code, now_iso(), expires_at, traffic_gb, sub_id),
             )
             await conn.commit()
             return cur.lastrowid or 0
@@ -587,6 +596,8 @@ class DB:
 
 # ---------- row mappers ----------
 def _row_to_sub(row) -> Subscription:
+    # Порядок колонок после всех ALTER'ов: 0..8 из SCHEMA, 9=notified_expiring,
+    # 10=sub_id. Для совместимости со снапшотами без миграции — fallback на "".
     return Subscription(
         id=row[0],
         tg_id=row[1],
@@ -597,6 +608,7 @@ def _row_to_sub(row) -> Subscription:
         expires_at=row[6],
         traffic_gb=row[7],
         active=bool(row[8]),
+        sub_id=row[10] if len(row) > 10 else "",
     )
 
 

@@ -131,8 +131,11 @@ class XUIClient:
         expiry_unix_ms: int,
         flow: str = "xtls-rprx-vision",
         limit_ip: int = 2,
+        sub_id: str = "",
     ) -> str:
-        """Добавить клиента в существующий VLESS-инбаунд. Возвращает UUID."""
+        """Добавить клиента в существующий VLESS-инбаунд. Возвращает UUID.
+        sub_id — токен для subscription-URL (Happ one-tap). Пусто = клиент
+        без sub-URL, только vless://."""
         async with self._client_lock:
             client_uuid = str(uuid_lib.uuid4())
             total_bytes = 0 if total_gb <= 0 else total_gb * 1024 * 1024 * 1024
@@ -147,7 +150,7 @@ class XUIClient:
                         "expiryTime": expiry_unix_ms,
                         "enable": True,
                         "tgId": "",
-                        "subId": "",
+                        "subId": sub_id,
                         "reset": 0,
                     }
                 ]
@@ -183,6 +186,7 @@ class XUIClient:
         enable: bool = True,
         flow: str = "xtls-rprx-vision",
         limit_ip: int = 2,
+        sub_id: str = "",
     ) -> None:
         async with self._client_lock:
             total_bytes = 0 if total_gb <= 0 else total_gb * 1024 * 1024 * 1024
@@ -197,7 +201,7 @@ class XUIClient:
                         "expiryTime": expiry_unix_ms,
                         "enable": enable,
                         "tgId": "",
-                        "subId": "",
+                        "subId": sub_id,
                         "reset": 0,
                     }
                 ]

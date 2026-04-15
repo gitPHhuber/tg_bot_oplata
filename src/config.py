@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     vless_flow: str = "xtls-rprx-vision"
     vless_fp: str = "chrome"
 
+    # Публичный endpoint 3x-ui subscription-server (e.g. https://176-108-242-105.nip.io/sub/).
+    # Если задан — бот выдаёт клиенту https-подписку + Happ-deeplink.
+    # Если пуст — fallback на классический vless:// (без one-tap Happ).
+    sub_base_url: str = ""
+
     # Payments
     payment_mode: str = "manual"  # manual | yookassa
     yookassa_shop_id: str = ""
