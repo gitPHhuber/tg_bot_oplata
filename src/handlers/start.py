@@ -57,21 +57,14 @@ async def cmd_start(
                 messages.REFERRAL_LINKED.format(referrer_id=ref_id)
             )
 
-    name = msg.from_user.first_name or msg.from_user.username or "друг"
     is_admin = settings.is_admin(msg.from_user.id)
-    users_count = await db.count_users()
     trial_ok = await db.is_trial_available(msg.from_user.id)
 
     # Reply-клавиатура — только для админа (юзеры идут чисто через inline)
     if is_admin:
-        await msg.answer(
-            messages.WELCOME.format(name=name, users_count=users_count),
-            reply_markup=admin_reply_kb(),
-        )
+        await msg.answer(messages.WELCOME, reply_markup=admin_reply_kb())
     else:
-        await msg.answer(
-            messages.WELCOME.format(name=name, users_count=users_count),
-        )
+        await msg.answer(messages.WELCOME)
 
     # Inline главное меню — основной интерфейс
     await msg.answer(
