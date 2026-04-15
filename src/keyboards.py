@@ -68,11 +68,11 @@ HAPP_IOS_URL = "https://apps.apple.com/app/happ-proxy-utility/id6504287215"
 HAPP_ANDROID_URL = "https://play.google.com/store/apps/details?id=com.happproxy"
 
 
-def install_kb(happ_deeplink: str) -> InlineKeyboardMarkup:
+def install_kb(sub_link: str) -> InlineKeyboardMarkup:
     """Клавиатура для one-tap импорта профиля в Happ.
-    Порядок важен: сначала предлагаем скачать приложение (если ещё нет),
-    потом кнопка активации. Большая кнопка Happ-deeplink — единственная
-    url-кнопка; открытие в TG триггерит системный intent с happ://."""
+    Telegram Bot API разрешает в url= только http/https/tg, поэтому кладём
+    прямой HTTPS subscription-URL. На мобилке Happ перехватывает sub-URL
+    через OS-intent и импортирует подписку."""
     rows: list[list[InlineKeyboardButton]] = []
     rows.append(
         [
@@ -80,9 +80,9 @@ def install_kb(happ_deeplink: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📥 Happ · Android", url=HAPP_ANDROID_URL),
         ]
     )
-    if happ_deeplink:
+    if sub_link:
         rows.append(
-            [InlineKeyboardButton(text="🔗 Активировать профиль", url=happ_deeplink)]
+            [InlineKeyboardButton(text="🔗 Активировать профиль", url=sub_link)]
         )
     rows.append(
         [InlineKeyboardButton(text="◀️ В главное меню", callback_data="m:home")]
@@ -161,13 +161,12 @@ def gift_tariffs_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def profile_kb(has_active_sub: bool, happ_deeplink: str = "") -> InlineKeyboardMarkup:
+def profile_kb(has_active_sub: bool, sub_link: str = "") -> InlineKeyboardMarkup:
     """Действия в карточке моей подписки.
-    happ_deeplink (если задан) — добавляет 3 кнопки для one-tap импорта в Happ
-    в самом верху (Happ iOS / Happ Android / Активировать профиль)."""
+    sub_link (HTTPS subscription URL) — добавляет 3 кнопки one-tap импорта в Happ."""
     rows: list[list[InlineKeyboardButton]] = []
     if has_active_sub:
-        if happ_deeplink:
+        if sub_link:
             rows.append(
                 [
                     InlineKeyboardButton(text="📥 Happ · iOS",     url=HAPP_IOS_URL),
@@ -175,7 +174,7 @@ def profile_kb(has_active_sub: bool, happ_deeplink: str = "") -> InlineKeyboardM
                 ]
             )
             rows.append(
-                [InlineKeyboardButton(text="🔗 Активировать профиль", url=happ_deeplink)]
+                [InlineKeyboardButton(text="🔗 Активировать профиль", url=sub_link)]
             )
         rows.append(
             [

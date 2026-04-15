@@ -14,7 +14,7 @@ from ..ui import (
     progress_bar,
     status_emoji_for_days,
 )
-from ..vless_link import build_happ_deeplink, build_primary_link
+from ..vless_link import build_primary_link
 from ..xui_client import XUIClient
 
 router = Router(name="profile")
@@ -92,8 +92,7 @@ async def _build_profile_view(tg_id: int, db: DB, xui: XUIClient) -> tuple[str, 
 @router.callback_query(F.data == "m:profile")
 async def cb_show_profile(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
     text, link, has_active = await _build_profile_view(cq.from_user.id, db, xui)
-    deeplink = build_happ_deeplink(link) if has_active else ""
-    kb = profile_kb(has_active_sub=has_active, happ_deeplink=deeplink)
+    kb = profile_kb(has_active_sub=has_active, sub_link=link if has_active else "")
     try:
         await cq.message.edit_text(text, reply_markup=kb)
     except Exception:
@@ -105,8 +104,7 @@ async def cb_show_profile(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
 @router.message(F.text == messages.MENU_PROFILE)
 async def show_profile(msg: Message, db: DB, xui: XUIClient) -> None:
     text, link, has_active = await _build_profile_view(msg.from_user.id, db, xui)
-    deeplink = build_happ_deeplink(link) if has_active else ""
-    await msg.answer(text, reply_markup=profile_kb(has_active_sub=has_active, happ_deeplink=deeplink))
+    await msg.answer(text, reply_markup=profile_kb(has_active_sub=has_active, sub_link=link if has_active else ""))
 
 
 @router.callback_query(F.data == "p:copy")

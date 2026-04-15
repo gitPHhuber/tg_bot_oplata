@@ -18,7 +18,6 @@ from .services import (
     process_referral_after_activation,
 )
 from .tariffs import get_tariff
-from .vless_link import build_happ_deeplink
 from .xui_client import XUIClient
 
 log = logging.getLogger(__name__)
@@ -70,7 +69,6 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
                 except Exception:
                     pass
 
-            deeplink = build_happ_deeplink(link)
             if p.recipient_tg_id:
                 # Это gift: уведомляем покупателя и получателя отдельно
                 buyer = await db.get_user(p.tg_id)
@@ -87,7 +85,7 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
                             expires=format_dt_human(sub.expires_at),
                             link=link,
                         ),
-                        reply_markup=install_kb(deeplink),
+                        reply_markup=install_kb(link),
                     )
                 except Exception as e:
                     log.warning("notify gift recipient %s failed: %s", p.recipient_tg_id, e)
@@ -111,7 +109,7 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
                             expires=format_dt_human(sub.expires_at),
                             link=link,
                         ),
-                        reply_markup=install_kb(deeplink),
+                        reply_markup=install_kb(link),
                     )
                 except Exception as e:
                     log.warning("notify user %s failed: %s", p.tg_id, e)

@@ -12,7 +12,6 @@ from ..db import DB
 from ..keyboards import install_kb, main_inline_back_kb, pay_kb, tariffs_kb
 from ..services import activate_subscription, format_dt_human, process_referral_after_activation
 from ..tariffs import get_tariff
-from ..vless_link import build_happ_deeplink
 from ..xui_client import XUIClient
 
 log = logging.getLogger(__name__)
@@ -243,7 +242,6 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
         # Очищаем промо из state — повторное использование одним юзером невозможно
         await state.update_data(promo_code=None, promo_kind=None, promo_value=None, promo_id=None)
 
-        deeplink = build_happ_deeplink(link)
         if payment.recipient_tg_id:
             # gift flow: получателю шлём ключ, покупателю — подтверждение
             buyer = await db.get_user(cq.from_user.id)
@@ -260,7 +258,7 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                         expires=format_dt_human(sub.expires_at),
                         link=link,
                     ),
-                    reply_markup=install_kb(deeplink),
+                    reply_markup=install_kb(link),
                 )
             except Exception as e:
                 log.warning("notify gift recipient %s failed: %s", payment.recipient_tg_id, e)
@@ -278,7 +276,7 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                     expires=format_dt_human(sub.expires_at),
                     link=link,
                 ),
-                reply_markup=install_kb(deeplink),
+                reply_markup=install_kb(link),
             )
         await process_referral_after_activation(db, xui, bot, beneficiary_id)
         return
