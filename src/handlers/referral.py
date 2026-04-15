@@ -19,8 +19,8 @@ def _build_share_link(bot_username: str, tg_id: int) -> str:
 def _build_share_url(link: str) -> str:
     """tg://msg_url=… — кнопка «Поделиться» открывает выбор чата с готовым текстом."""
     text = (
-        "Я пользуюсь Atlas — быстрым VPN, и тебе советую. "
-        "Жми по ссылке, регистрируйся:\n" + link
+        "Я пользуюсь Atlas — быстрый и стабильный интернет без ограничений. "
+        "Держи ссылку — первые 3 дня за 49₽:\n" + link
     )
     return f"https://t.me/share/url?url={quote_plus(link)}&text={quote_plus(text)}"
 

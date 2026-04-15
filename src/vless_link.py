@@ -42,7 +42,7 @@ def build_happ_deeplink(sub_link: str) -> str:
     return f"happ://add?url={quote(sub_link, safe='')}"
 
 
-def build_primary_link(sub_id: str, client_uuid: str, remark: str = "Atlas VPN") -> str:
+def build_primary_link(sub_id: str, client_uuid: str, remark: str = "Atlas") -> str:
     """Основная ссылка, которую мы показываем юзеру. HTTPS-sub если доступна
     (one-tap через Happ), иначе — классическая vless://."""
     link = build_sub_link(sub_id)
