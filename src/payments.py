@@ -88,10 +88,20 @@ async def create_payment(tariff: Tariff, tg_id: int, method: str | None = None) 
     payload = _build_payload(tariff, tg_id, method=method)
     idempotency_key = str(uuid_lib.uuid4())
 
-    def _create() -> "YKPayment":
-        return YKPayment.create(payload, idempotency_key)
+    def _create(pl: dict, idem: str) -> "YKPayment":
+        return YKPayment.create(pl, idem)
 
-    payment = await asyncio.to_thread(_create)
+    try:
+        payment = await asyncio.to_thread(_create, payload, idempotency_key)
+    except Exception as e:
+        # Fallback: метод не включён в магазине → открываем универсальный checkout
+        desc = str(e).lower()
+        if method and "payment method is not available" in desc:
+            log.warning("yookassa: method=%s not available, falling back to universal checkout", method)
+            payload = _build_payload(tariff, tg_id, method=None)
+            payment = await asyncio.to_thread(_create, payload, str(uuid_lib.uuid4()))
+        else:
+            raise
     return CreatedPayment(
         yk_id=payment.id,
         confirmation_url=payment.confirmation.confirmation_url,
