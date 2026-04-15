@@ -9,7 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from .. import messages, payments
 from ..config import settings
 from ..db import DB
-from ..keyboards import install_kb, main_inline_back_kb, pay_kb, tariffs_kb
+from ..keyboards import install_kb, main_inline_back_kb, pay_kb, payment_method_kb, tariffs_kb
 from ..services import activate_subscription, format_dt_human, process_referral_after_activation
 from ..tariffs import get_tariff
 from ..xui_client import XUIClient
@@ -136,6 +136,7 @@ def _apply_promo_to_price(price: int, kind: str, value: int) -> int:
 
 @router.callback_query(F.data.startswith("buy:") & ~F.data.in_({"buy:promo"}))
 async def on_buy_click(cq: CallbackQuery, state: FSMContext, db: DB) -> None:
+    """Первый шаг: выбор тарифа → показываем выбор способа оплаты."""
     code = cq.data.split(":", 1)[1]
     tariff = get_tariff(code)
     if not tariff:
@@ -155,7 +156,48 @@ async def on_buy_click(cq: CallbackQuery, state: FSMContext, db: DB) -> None:
             )
             return
 
-    # Применяем промо если есть в state
+    # Считаем финальную цену (с учётом промо) — только для показа, платёж создаём на следующем шаге
+    promo = await _get_active_promo(state)
+    final_price = tariff.price_rub
+    if promo:
+        final_price = _apply_promo_to_price(tariff.price_rub, promo[0], promo[1])
+    price_line = (
+        f"{final_price}₽ <s>{tariff.price_rub}₽</s>"
+        if promo and final_price != tariff.price_rub
+        else f"{final_price}₽"
+    )
+
+    await cq.message.edit_text(
+        messages.CHOOSE_PAYMENT_METHOD.format(title=tariff.title, price=price_line),
+        reply_markup=payment_method_kb(tariff.code),
+    )
+    await cq.answer()
+
+
+@router.callback_query(F.data.startswith("pay:"))
+async def on_pay_method_click(cq: CallbackQuery, state: FSMContext, db: DB) -> None:
+    """Второй шаг: юзер выбрал СБП/карту — создаём платёж с нужным методом."""
+    parts = cq.data.split(":")
+    if len(parts) != 3:
+        await cq.answer("Некорректные данные", show_alert=True)
+        return
+    _, code, method = parts
+    if method not in ("sbp", "card"):
+        await cq.answer("Неизвестный способ оплаты", show_alert=True)
+        return
+
+    tariff = get_tariff(code)
+    if not tariff:
+        await cq.answer("Тариф не найден", show_alert=True)
+        return
+    if settings.payment_mode != "yookassa":
+        await cq.answer("Платежи отключены", show_alert=True)
+        return
+    if tariff.code == "trial_50" and not await db.is_trial_available(cq.from_user.id):
+        await cq.answer("🎣 Проба уже использована", show_alert=True)
+        return
+
+    # Применяем промо
     promo = await _get_active_promo(state)
     promo_id: int | None = None
     final_price = tariff.price_rub
@@ -166,7 +208,6 @@ async def on_buy_click(cq: CallbackQuery, state: FSMContext, db: DB) -> None:
         promo_id = data.get("promo_id")
 
     try:
-        # Создаём ad-hoc Tariff с пересчитанной ценой для ЮKassa
         from ..tariffs import Tariff as _T
         priced = _T(
             code=tariff.code,
@@ -177,8 +218,8 @@ async def on_buy_click(cq: CallbackQuery, state: FSMContext, db: DB) -> None:
             limit_ip=tariff.limit_ip,
             whitelist=tariff.whitelist,
         )
-        created = await payments.create_payment(priced, cq.from_user.id)
-    except Exception as e:
+        created = await payments.create_payment(priced, cq.from_user.id, method=method)
+    except Exception:
         log.exception("create_payment failed")
         await cq.answer("Не удалось создать платёж, попробуй позже", show_alert=True)
         return
@@ -197,8 +238,10 @@ async def on_buy_click(cq: CallbackQuery, state: FSMContext, db: DB) -> None:
         if promo and final_price != tariff.price_rub
         else f"{final_price}₽"
     )
+    method_label = "🇷🇺 СБП" if method == "sbp" else "💳 Картой"
     await cq.message.edit_text(
-        messages.PAYMENT_CREATED.format(title=tariff.title, price=price_line),
+        messages.PAYMENT_CREATED.format(title=tariff.title, price=price_line) +
+        f"\n\nСпособ: <b>{method_label}</b>",
         reply_markup=pay_kb(created.confirmation_url, tariff.code),
     )
     await cq.answer()

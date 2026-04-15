@@ -100,6 +100,18 @@ def pay_kb(url: str, tariff_code: str) -> InlineKeyboardMarkup:
     )
 
 
+def payment_method_kb(tariff_code: str) -> InlineKeyboardMarkup:
+    """Выбор способа оплаты после клика на тариф.
+    card/sbp форсируют соответствующий экран YooKassa без промежуточного выбора."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🇷🇺 СБП — быстрый перевод из банка", callback_data=f"pay:{tariff_code}:sbp")],
+            [InlineKeyboardButton(text="💳 Банковская карта", callback_data=f"pay:{tariff_code}:card")],
+            [InlineKeyboardButton(text="◀️ Назад к тарифам", callback_data="m:buy")],
+        ]
+    )
+
+
 def back_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="◀️ Назад", callback_data="back")]]

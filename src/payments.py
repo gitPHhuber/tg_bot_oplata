@@ -40,9 +40,9 @@ class CreatedPayment:
     amount_rub: int
 
 
-def _build_payload(tariff: Tariff, tg_id: int) -> dict:
+def _build_payload(tariff: Tariff, tg_id: int, method: str | None = None) -> dict:
     amount_str = f"{tariff.price_rub}.00"
-    return {
+    payload: dict = {
         "amount": {"value": amount_str, "currency": "RUB"},
         "capture": True,
         "confirmation": {
@@ -68,9 +68,16 @@ def _build_payload(tariff: Tariff, tg_id: int) -> dict:
             ],
         },
     }
+    # Форсируем метод → YooKassa сразу открывает экран этого метода,
+    # без промежуточного выбора. None = универсальный checkout со всеми доступными.
+    if method == "sbp":
+        payload["payment_method_data"] = {"type": "sbp"}
+    elif method == "card":
+        payload["payment_method_data"] = {"type": "bank_card"}
+    return payload
 
 
-async def create_payment(tariff: Tariff, tg_id: int) -> CreatedPayment:
+async def create_payment(tariff: Tariff, tg_id: int, method: str | None = None) -> CreatedPayment:
     if settings.payment_mode != "yookassa":
         raise RuntimeError("payment_mode != yookassa")
     _ensure_yookassa()
@@ -78,7 +85,7 @@ async def create_payment(tariff: Tariff, tg_id: int) -> CreatedPayment:
     from yookassa import Payment as YKPayment  # noqa: WPS433
     import uuid as uuid_lib
 
-    payload = _build_payload(tariff, tg_id)
+    payload = _build_payload(tariff, tg_id, method=method)
     idempotency_key = str(uuid_lib.uuid4())
 
     def _create() -> "YKPayment":
