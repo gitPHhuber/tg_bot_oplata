@@ -3,22 +3,55 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Tariff:
-    code: str            # short id used in callback_data
-    title: str           # человекочитаемое название
-    price_rub: int       # цена в рублях (целое)
-    days: int            # длительность подписки в днях
-    traffic_gb: int      # лимит трафика; 0 = без лимита
-    badge: str = ""      # пометка справа от цены: "🔥 ХИТ" / "💎 ВЫГОДНО -50%"
+    code: str                # short id used in callback_data
+    title: str               # человекочитаемое название
+    price_rub: int           # цена в рублях (целое)
+    days: int                # длительность подписки в днях
+    traffic_gb: int = 0      # 0 = безлимит (FUP прописан в оферте)
+    limit_ip: int = 3        # сколько одновременных подключений с одного профиля
+    whitelist: bool = False  # True = Pro с обходом "белых списков" (split-tunnel через pro-inbound)
+    badge: str = ""          # пометка справа от цены: "🔥 популярно" / "💎 −45%"
     featured: bool = False
 
 
-# Тарифы. Меняй здесь — больше нигде дублирования нет.
+# Ценовая воронка: 49 (hook) → 249 (workhorse) → 449 (upsell) → 2990 (anchor).
+# Безлимит трафика во всех — декларируется на витрине; реальные пороги — через FUP.
+# whitelist=True включается на уровне 3x-ui pro-inbound с split-tunnel routing.
 TARIFFS: list[Tariff] = [
-    Tariff("m_50",  "1 месяц / 50 GB",       150,  30,  50),
-    Tariff("m_200", "1 месяц / 200 GB",      250,  30, 200,  badge="🔥 ХИТ", featured=True),
-    Tariff("m_unl", "1 месяц / без лимита",  350,  30,   0),
-    Tariff("q_unl", "3 месяца / без лимита", 900,  90,   0,  badge="−14%"),
-    Tariff("y_unl", "1 год / без лимита",   3000, 365,   0,  badge="💎 −29%"),
+    Tariff(
+        code="trial_50",
+        title="🎣 Проба · 3 дня",
+        price_rub=49,
+        days=3,
+        limit_ip=3,
+        badge="первый раз",
+    ),
+    Tariff(
+        code="std_m",
+        title="⚡ Стандарт · 30 дней",
+        price_rub=249,
+        days=30,
+        limit_ip=3,
+        badge="🔥 популярно",
+        featured=True,
+    ),
+    Tariff(
+        code="pro_m",
+        title="💎 Pro · 30 дней",
+        price_rub=449,
+        days=30,
+        limit_ip=10,
+        whitelist=True,
+    ),
+    Tariff(
+        code="pro_y",
+        title="🏆 Pro · Год",
+        price_rub=2990,
+        days=365,
+        limit_ip=10,
+        whitelist=True,
+        badge="💎 −45%",
+    ),
 ]
 
 

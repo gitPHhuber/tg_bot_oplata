@@ -146,6 +146,15 @@ async def on_buy_click(cq: CallbackQuery, state: FSMContext, db: DB) -> None:
         await cq.answer("Платежи отключены", show_alert=True)
         return
 
+    # Проба за 49₽ — одна на юзера
+    if tariff.code == "trial_50":
+        if not await db.is_trial_available(cq.from_user.id):
+            await cq.answer(
+                "🎣 Проба за 49₽ доступна только один раз. Выбери другой тариф.",
+                show_alert=True,
+            )
+            return
+
     # Применяем промо если есть в state
     promo = await _get_active_promo(state)
     promo_id: int | None = None
@@ -165,6 +174,8 @@ async def on_buy_click(cq: CallbackQuery, state: FSMContext, db: DB) -> None:
             price_rub=final_price,
             days=tariff.days,
             traffic_gb=tariff.traffic_gb,
+            limit_ip=tariff.limit_ip,
+            whitelist=tariff.whitelist,
         )
         created = await payments.create_payment(priced, cq.from_user.id)
     except Exception as e:

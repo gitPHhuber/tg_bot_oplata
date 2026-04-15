@@ -15,11 +15,7 @@ from ..keyboards import (
     main_inline_kb,
     offer_kb,
 )
-from ..services import (
-    activate_gift_subscription,
-    format_dt_human,
-    process_referral_after_activation,
-)
+from ..services import format_dt_human
 
 log = logging.getLogger(__name__)
 router = Router(name="start")
@@ -87,40 +83,10 @@ async def cmd_start(
     )
 
 
-# ===== Free trial =====
-
-@router.callback_query(F.data == "m:trial")
-async def cb_trial(cq: CallbackQuery, db: DB, xui, bot) -> None:
-    if not await db.is_trial_available(cq.from_user.id):
-        await cq.answer(messages.TRIAL_OFFERED_ALREADY, show_alert=True)
-        return
-    try:
-        sub, link = await activate_gift_subscription(
-            db, xui, cq.from_user.id, days=3, traffic_gb=0
-        )
-    except Exception as e:
-        log.exception("trial activation failed")
-        await cq.answer(f"Ошибка: {e}", show_alert=True)
-        return
-    await db.mark_trial_used(cq.from_user.id)
-    # Записать как manual-платёж 0₽ для статистики/реферальной механики
-    await db.create_payment(
-        tg_id=cq.from_user.id,
-        yk_id=None,
-        tariff_code=sub.tariff_code,
-        amount_rub=0,
-        status="manual",
-    )
-    # Триггер реферального бонуса (это первая активация)
-    await process_referral_after_activation(db, xui, bot, cq.from_user.id)
-    text = messages.TRIAL_GRANTED.format(
-        expires=format_dt_human(sub.expires_at), link=link
-    )
-    try:
-        await cq.message.edit_text(text, reply_markup=main_inline_back_kb())
-    except Exception:
-        await cq.message.answer(text, reply_markup=main_inline_back_kb())
-    await cq.answer("Подписка активирована 🎉")
+# Бесплатный trial (callback m:trial) заменён платным тарифом trial_50 за 49₽ —
+# кнопка в main_inline_kb ведёт напрямую на buy:trial_50. Идём через платёжный
+# флоу в handlers/buy.py, там же проверяем is_trial_available и помечаем его
+# использованным в services.activate_subscription.
 
 
 # ===== inline-меню роутинг =====

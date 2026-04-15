@@ -85,11 +85,11 @@ def main_inline_kb(
     show_trial: bool = False,
 ) -> InlineKeyboardMarkup:
     """Главное inline-меню в стиле «бренд». Показывается под /start.
-    show_trial=True показывает большую кнопку «🎁 Попробовать N дней бесплатно»."""
+    show_trial=True показывает большую кнопку «🎣 Проба · 3 дня за 49₽»."""
     rows: list[list[InlineKeyboardButton]] = []
     if show_trial:
         rows.append(
-            [InlineKeyboardButton(text="🎁 Попробовать 3 дня бесплатно", callback_data="m:trial")]
+            [InlineKeyboardButton(text="🎣 Проба · 3 дня за 49₽", callback_data="buy:trial_50")]
         )
     rows.append(
         [InlineKeyboardButton(text="🛒 Купить подписку", callback_data="m:buy")]
@@ -167,10 +167,17 @@ def main_inline_back_kb() -> InlineKeyboardMarkup:
 
 
 def about_kb() -> InlineKeyboardMarkup:
-    """Экран «О нас»: кнопки оферты и возврата."""
+    """Экран «О нас»: кнопки оферты и возврата.
+    Если задан settings.offer_url — оферта открывается внешней ссылкой
+    (teletype и т.п.); иначе — inline callback на старый текст."""
+    from .config import settings
+    if settings.offer_url:
+        offer_btn = InlineKeyboardButton(text="📄 Договор оферты", url=settings.offer_url)
+    else:
+        offer_btn = InlineKeyboardButton(text="📄 Договор оферты", callback_data="m:offer")
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📄 Договор оферты", callback_data="m:offer")],
+            [offer_btn],
             [InlineKeyboardButton(text="◀️ Назад", callback_data="m:home")],
         ]
     )

@@ -13,7 +13,7 @@ import aiosqlite
 
 from .config import settings
 from .db import DB, Subscription
-from .tariffs import Tariff
+from .tariffs import Tariff, get_tariff
 from .vless_link import build_vless_link
 from .xui_client import XUIClient, days_from_now_unix_ms
 
@@ -57,6 +57,7 @@ async def activate_subscription(
         email=email,
         total_gb=tariff.traffic_gb,
         expiry_unix_ms=expiry_ms,
+        limit_ip=tariff.limit_ip,
     )
 
     expires_iso = datetime.fromtimestamp(expiry_ms / 1000, tz=timezone.utc).isoformat()
@@ -70,6 +71,8 @@ async def activate_subscription(
     )
     sub = await db.get_subscription(sub_id)
     assert sub is not None
+    if tariff.code == "trial_50":
+        await db.mark_trial_used(tg_id)
     link = build_vless_link(client_uuid, remark=f"VPN-{tariff.code}")
     log.info("activated sub %s for tg=%s tariff=%s", sub_id, tg_id, tariff.code)
     return sub, link
@@ -181,6 +184,8 @@ async def extend_subscription(
     new_expires_ms = int(new_expires.timestamp() * 1000)
     new_expires_iso = new_expires.isoformat()
 
+    t = get_tariff(sub.tariff_code)
+    limit_ip = t.limit_ip if t else 3
     await xui.update_client(
         inbound_id=settings.xui_inbound_id,
         client_uuid=sub.xui_uuid,
@@ -188,6 +193,7 @@ async def extend_subscription(
         total_gb=sub.traffic_gb,
         expiry_unix_ms=new_expires_ms,
         enable=True,
+        limit_ip=limit_ip,
     )
     await db.extend_subscription(sub.id, new_expires_iso)
     updated = await db.get_subscription(sub.id)
