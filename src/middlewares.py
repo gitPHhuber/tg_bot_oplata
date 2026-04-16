@@ -11,10 +11,11 @@ from .xui_client import XUIClient
 
 
 class DependenciesMiddleware(BaseMiddleware):
-    def __init__(self, db: DB, xui: XUIClient):
+    def __init__(self, db: DB, xui: XUIClient, xui_wl: XUIClient | None = None):
         super().__init__()
         self.db = db
         self.xui = xui
+        self.xui_wl = xui_wl
 
     async def __call__(
         self,
@@ -24,6 +25,7 @@ class DependenciesMiddleware(BaseMiddleware):
     ) -> Any:
         data["db"] = self.db
         data["xui"] = self.xui
+        data["xui_wl"] = self.xui_wl
         return await handler(event, data)
 
 

@@ -218,6 +218,7 @@ async def on_pay_method_click(cq: CallbackQuery, state: FSMContext, db: DB) -> N
             traffic_gb=tariff.traffic_gb,
             limit_ip=tariff.limit_ip,
             whitelist=tariff.whitelist,
+            allowlist_exit=tariff.allowlist_exit,
         )
         created = await payments.create_payment(priced, cq.from_user.id, method=method)
     except Exception:
@@ -249,7 +250,7 @@ async def on_pay_method_click(cq: CallbackQuery, state: FSMContext, db: DB) -> N
 
 
 @router.callback_query(F.data.startswith("check:"))
-async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIClient, bot) -> None:
+async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIClient, bot, xui_wl: XUIClient | None = None) -> None:
     """Юзер сам жмёт «проверить оплату» — гоним напрямую в ЮKassa."""
     pending = await db.get_pending_payments()
     user_pending = [p for p in pending if p.tg_id == cq.from_user.id]
@@ -275,7 +276,7 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
             await cq.answer("Тариф удалён, обратись в поддержку", show_alert=True)
             return
         beneficiary_id = payment.recipient_tg_id or cq.from_user.id
-        sub, link = await activate_subscription(db, xui, beneficiary_id, tariff)
+        sub, link = await activate_subscription(db, xui, beneficiary_id, tariff, xui_wl=xui_wl)
         await db.update_payment_status(payment.id, "succeeded", sub.id)
         # Списываем промо если был использован
         if payment.promo_id:
@@ -302,7 +303,7 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                         expires=format_dt_human(sub.expires_at),
                         link=link,
                     ),
-                    reply_markup=install_kb(await build_tap_link(sub.sub_id) or link),
+                    reply_markup=install_kb(await build_tap_link(sub.sub_id, wl=tariff.allowlist_exit) or link),
                 )
             except Exception as e:
                 log.warning("notify gift recipient %s failed: %s", payment.recipient_tg_id, e)
@@ -320,9 +321,9 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                     expires=format_dt_human(sub.expires_at),
                     link=link,
                 ),
-                reply_markup=install_kb(await build_tap_link(sub.sub_id) or link),
+                reply_markup=install_kb(await build_tap_link(sub.sub_id, wl=tariff.allowlist_exit) or link),
             )
-        await process_referral_after_activation(db, xui, bot, beneficiary_id)
+        await process_referral_after_activation(db, xui, bot, beneficiary_id, xui_wl=xui_wl)
         return
     if status == "canceled":
         await db.update_payment_status(payment.id, "canceled")

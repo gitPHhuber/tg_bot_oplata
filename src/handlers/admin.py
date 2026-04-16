@@ -131,7 +131,7 @@ async def cmd_stats(msg: Message, db: DB) -> None:
 
 
 @router.message(Command("grant"))
-async def cmd_grant(msg: Message, command: CommandObject, db: DB, xui: XUIClient) -> None:
+async def cmd_grant(msg: Message, command: CommandObject, db: DB, xui: XUIClient, xui_wl: XUIClient | None = None) -> None:
     """/grant <tg_id> <tariff_code> — выдать подписку вручную."""
     if not _is_admin(msg):
         await msg.answer(messages.ADMIN_ONLY)
@@ -158,7 +158,7 @@ async def cmd_grant(msg: Message, command: CommandObject, db: DB, xui: XUIClient
     await db.upsert_user(tg_id=tg_id, username=None, first_name=None)
 
     try:
-        sub, link = await activate_subscription(db, xui, tg_id, tariff)
+        sub, link = await activate_subscription(db, xui, tg_id, tariff, xui_wl=xui_wl)
     except Exception as e:
         log.exception("grant failed")
         await msg.answer(f"❌ Ошибка: {e}")
@@ -180,7 +180,7 @@ async def cmd_grant(msg: Message, command: CommandObject, db: DB, xui: XUIClient
 
 
 @router.message(Command("revoke"))
-async def cmd_revoke(msg: Message, command: CommandObject, db: DB, xui: XUIClient) -> None:
+async def cmd_revoke(msg: Message, command: CommandObject, db: DB, xui: XUIClient, xui_wl: XUIClient | None = None) -> None:
     if not _is_admin(msg):
         await msg.answer(messages.ADMIN_ONLY)
         return
@@ -196,7 +196,7 @@ async def cmd_revoke(msg: Message, command: CommandObject, db: DB, xui: XUIClien
     if not sub:
         await msg.answer("Активной подписки нет.")
         return
-    await deactivate_subscription(db, xui, sub)
+    await deactivate_subscription(db, xui, sub, xui_wl=xui_wl)
     await msg.answer(messages.ADMIN_REVOKED.format(tg_id=tg_id))
 
 

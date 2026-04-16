@@ -24,7 +24,7 @@ from .xui_client import XUIClient
 log = logging.getLogger(__name__)
 
 
-async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
+async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot, xui_wl: XUIClient | None = None) -> None:
     if settings.payment_mode != "yookassa":
         return
     pending = await db.get_pending_payments()
@@ -56,7 +56,7 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
             # Кому активируем: если есть recipient — это gift, иначе самому покупателю
             beneficiary_id = p.recipient_tg_id or p.tg_id
             try:
-                sub, link = await activate_subscription(db, xui, beneficiary_id, tariff)
+                sub, link = await activate_subscription(db, xui, beneficiary_id, tariff, xui_wl=xui_wl)
             except Exception as e:
                 log.exception("activate failed for payment %s: %s", p.id, e)
                 # Откатываем статус обратно, чтобы следующий poll мог повторить
@@ -86,7 +86,7 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
                             expires=format_dt_human(sub.expires_at),
                             link=link,
                         ),
-                        reply_markup=install_kb(await build_tap_link(sub.sub_id) or link),
+                        reply_markup=install_kb(await build_tap_link(sub.sub_id, wl=tariff.allowlist_exit) or link),
                     )
                 except Exception as e:
                     log.warning("notify gift recipient %s failed: %s", p.recipient_tg_id, e)
@@ -110,19 +110,19 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot) -> None:
                             expires=format_dt_human(sub.expires_at),
                             link=link,
                         ),
-                        reply_markup=install_kb(await build_tap_link(sub.sub_id) or link),
+                        reply_markup=install_kb(await build_tap_link(sub.sub_id, wl=tariff.allowlist_exit) or link),
                     )
                 except Exception as e:
                     log.warning("notify user %s failed: %s", p.tg_id, e)
 
             # Реферальный бонус — за beneficiary, не за плательщика (логично:
             # если пригласённый получил подарок — это его первая активация)
-            await process_referral_after_activation(db, xui, bot, beneficiary_id)
+            await process_referral_after_activation(db, xui, bot, beneficiary_id, xui_wl=xui_wl)
         elif status == "canceled":
             await db.update_payment_status(p.id, "canceled")
 
 
-async def check_expiring_subscriptions(db: DB, xui: XUIClient, bot: Bot) -> None:
+async def check_expiring_subscriptions(db: DB, xui: XUIClient, bot: Bot, xui_wl: XUIClient | None = None) -> None:
     """Два прохода:
     1) Подписки, которые УЖЕ истекли → деактивировать + один NOTIFY_EXPIRED.
     2) Подписки, которые истекают в ближайшие 24ч И ещё не уведомлены →
@@ -135,7 +135,7 @@ async def check_expiring_subscriptions(db: DB, xui: XUIClient, bot: Bot) -> None
     # 1. Истёкшие → деактивация (delete из xui + active=0 в БД)
     for sub in await db.get_expired_active(now_iso):
         try:
-            await deactivate_subscription(db, xui, sub)
+            await deactivate_subscription(db, xui, sub, xui_wl=xui_wl)
             await bot.send_message(sub.tg_id, messages.NOTIFY_EXPIRED, reply_markup=renew_kb())
             log.info("sub %s expired and revoked", sub.id)
         except Exception as e:
@@ -156,13 +156,13 @@ async def check_expiring_subscriptions(db: DB, xui: XUIClient, bot: Bot) -> None
             log.warning("notify expiring sub %s failed: %s", sub.id, e)
 
 
-def setup_scheduler(db: DB, xui: XUIClient, bot: Bot) -> AsyncIOScheduler:
+def setup_scheduler(db: DB, xui: XUIClient, bot: Bot, xui_wl: XUIClient | None = None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
         poll_pending_payments,
         "interval",
         seconds=settings.payment_poll_interval,
-        kwargs={"db": db, "xui": xui, "bot": bot},
+        kwargs={"db": db, "xui": xui, "bot": bot, "xui_wl": xui_wl},
         id="poll_payments",
         coalesce=True,
         max_instances=1,
@@ -171,7 +171,7 @@ def setup_scheduler(db: DB, xui: XUIClient, bot: Bot) -> AsyncIOScheduler:
         check_expiring_subscriptions,
         "interval",
         minutes=settings.sub_check_interval,
-        kwargs={"db": db, "xui": xui, "bot": bot},
+        kwargs={"db": db, "xui": xui, "bot": bot, "xui_wl": xui_wl},
         id="check_expiring",
         coalesce=True,
         max_instances=1,

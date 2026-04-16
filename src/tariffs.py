@@ -9,7 +9,11 @@ class Tariff:
     days: int                # длительность подписки в днях
     traffic_gb: int = 0      # 0 = безлимит (FUP прописан в оферте)
     limit_ip: int = 3        # сколько одновременных подключений с одного профиля
-    whitelist: bool = False  # True = Pro с обходом "белых списков" (split-tunnel через pro-inbound)
+    whitelist: bool = False  # True = Pro split-tunnel (РФ-домены direct, xui_inbound_id_pro)
+    # True = тариф «Обход белых списков» для allowlist-регионов (Дагестан и пр.).
+    # Клиент создаётся в отдельной 3x-ui панели (relay), inbound с Reality
+    # SNI-spoof под CDN Одноклассников. Проходит через мобильный ТСПУ-allowlist.
+    allowlist_exit: bool = False
     badge: str = ""          # пометка справа от цены: "🔥 популярно" / "💎 −45%"
     featured: bool = False
 
@@ -51,6 +55,15 @@ TARIFFS: list[Tariff] = [
         limit_ip=10,
         whitelist=True,
         badge="💎 −45%",
+    ),
+    Tariff(
+        code="wl_m",
+        title="🛡 Обход белых списков · 30 дней",
+        price_rub=749,
+        days=30,
+        limit_ip=3,
+        allowlist_exit=True,
+        badge="для шатдауна",
     ),
 ]
 

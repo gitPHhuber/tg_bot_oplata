@@ -36,14 +36,33 @@ def build_vless_link(client_uuid: str, remark: str = "VPN") -> str:
     )
 
 
-def build_sub_link(sub_id: str) -> str:
+def build_vless_link_wl(client_uuid: str, remark: str = "Atlas-WL") -> str:
+    """VLESS-link для WL-inbound (relay с dest=pimg.mycdn.me).
+    Используется когда sub_wl_base_url не задан."""
+    params = (
+        f"type=tcp"
+        f"&security=reality"
+        f"&pbk={settings.vless_wl_pubkey}"
+        f"&fp={settings.vless_wl_fp}"
+        f"&sni={settings.vless_wl_sni}"
+        f"&sid={settings.vless_wl_short_id}"
+        f"&spx=%2F"
+        f"&flow={settings.vless_flow}"
+    )
+    return (
+        f"vless://{client_uuid}@{settings.vless_wl_host}:{settings.vless_wl_port}"
+        f"?{params}#{quote(remark)}"
+    )
+
+
+def build_sub_link(sub_id: str, wl: bool = False) -> str:
     """Публичный HTTPS-endpoint подписки (sub_base_url + sub_id).
-    Возвращает пустую строку если sub_base_url не настроен или sub_id пустой
-    (например legacy-подписки до миграции sub_id)."""
-    if not settings.sub_base_url or not sub_id:
+    wl=True → использует отдельный sub_wl_base_url (subscription-сервер relay-панели).
+    Возвращает пустую строку если нужный sub_base_url не настроен или sub_id пустой."""
+    base_url = settings.sub_wl_base_url if wl else settings.sub_base_url
+    if not base_url or not sub_id:
         return ""
-    base = settings.sub_base_url.rstrip("/")
-    return f"{base}/{sub_id}"
+    return f"{base_url.rstrip('/')}/{sub_id}"
 
 
 def build_happ_deeplink(sub_link: str) -> str:
@@ -53,11 +72,16 @@ def build_happ_deeplink(sub_link: str) -> str:
     return f"happ://add?url={quote(sub_link, safe='')}"
 
 
-def build_primary_link(sub_id: str, client_uuid: str, remark: str = "Atlas") -> str:
+def build_primary_link(
+    sub_id: str, client_uuid: str, remark: str = "Atlas", wl: bool = False
+) -> str:
     """Основная ссылка для показа юзеру (fallback-копипаст). HTTPS-sub если
-    доступна, иначе классическая vless://."""
-    link = build_sub_link(sub_id)
-    return link or build_vless_link(client_uuid, remark=remark)
+    доступна, иначе классическая vless://.
+    wl=True → ссылка для WL-inbound (другой host/port/pbk/sni)."""
+    link = build_sub_link(sub_id, wl=wl)
+    if link:
+        return link
+    return build_vless_link_wl(client_uuid, remark=remark) if wl else build_vless_link(client_uuid, remark=remark)
 
 
 async def _fetch_happ_crypt_link(sub_url: str) -> str | None:
@@ -99,7 +123,7 @@ def _derive_connect_base(sub_tap_base: str, sub_link: str) -> str:
     return ""
 
 
-async def build_tap_link(sub_id: str) -> str:
+async def build_tap_link(sub_id: str, wl: bool = False) -> str:
     """One-tap URL для inline-кнопки Telegram: тап → Happ открывается →
     подписка импортируется без подтверждений.
 
@@ -110,7 +134,7 @@ async def build_tap_link(sub_id: str) -> str:
          которая делает location.href=happ://add?url=sub (2 тапа на iOS).
       3) fallback SUB_TAP_BASE_URL=connect.html?d=happ://add?url=sub  — legacy.
       4) raw sub URL если ничего не настроено (откроет 3x-ui инфо-страницу)."""
-    sub = build_sub_link(sub_id)
+    sub = build_sub_link(sub_id, wl=wl)
     if not sub:
         return ""
     base = (settings.sub_tap_base_url or "").strip()

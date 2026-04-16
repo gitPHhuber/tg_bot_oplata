@@ -62,6 +62,26 @@ async def main() -> None:
     )
     await xui.login()
 
+    # Отдельный клиент для WL-тарифа (другая 3x-ui панель на relay).
+    # Если WL-конфиг не задан — тариф wl_m не продаётся, клиент не нужен.
+    xui_wl: XUIClient | None = None
+    if settings.wl_configured:
+        xui_wl = XUIClient(
+            base_url=settings.xui_wl_url,
+            web_path=settings.xui_wl_path,
+            username=settings.xui_wl_user,
+            password=settings.xui_wl_pass,
+            verify_ssl=settings.xui_wl_verify_ssl,
+        )
+        try:
+            await xui_wl.login()
+            log.info("xui_wl: connected to WL panel (inbound=%s)", settings.xui_wl_inbound_id)
+        except Exception as e:
+            log.error("xui_wl login failed, WL tariff disabled: %s", e)
+            xui_wl = None
+    else:
+        log.info("xui_wl: WL-config not set, tariff wl_m disabled")
+
     bot = Bot(
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -70,7 +90,7 @@ async def main() -> None:
     log.info("authorized as @%s", me.username)
 
     dp = Dispatcher(storage=MemoryStorage())
-    dp.update.middleware(DependenciesMiddleware(db, xui))
+    dp.update.middleware(DependenciesMiddleware(db, xui, xui_wl))
     dp.message.middleware(ThrottlingMiddleware(interval=0.4))
     dp.callback_query.middleware(ThrottlingMiddleware(interval=0.4))
     # ВАЖНО: порядок имеет значение.
@@ -89,7 +109,7 @@ async def main() -> None:
     dp.include_router(referral_router)
     dp.include_router(support_router)
 
-    scheduler = setup_scheduler(db, xui, bot)
+    scheduler = setup_scheduler(db, xui, bot, xui_wl=xui_wl)
     scheduler.start()
     log.info("scheduler started: poll=%ss, expire-check=%smin",
              settings.payment_poll_interval, settings.sub_check_interval)
@@ -112,6 +132,8 @@ async def main() -> None:
     finally:
         scheduler.shutdown(wait=False)
         await xui.close()
+        if xui_wl is not None:
+            await xui_wl.close()
         await bot.session.close()
 
 

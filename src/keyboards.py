@@ -39,9 +39,13 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
 
 
 def tariffs_kb(promo_label: str | None = None) -> InlineKeyboardMarkup:
-    """Список тарифов. badge подсвечивает featured. Кнопка промо снизу."""
+    """Список тарифов. badge подсвечивает featured. Кнопка промо снизу.
+    Тариф с allowlist_exit=True скрывается если WL-inbound не настроен."""
+    from .config import settings
     rows: list[list[InlineKeyboardButton]] = []
     for t in TARIFFS:
+        if t.allowlist_exit and not settings.wl_configured:
+            continue
         prefix = "⭐ " if t.featured else ""
         suffix = f"  {t.badge}" if t.badge else ""
         rows.append(
@@ -159,9 +163,12 @@ def main_inline_kb(
 
 
 def gift_tariffs_kb() -> InlineKeyboardMarkup:
-    """Список тарифов в режиме подарка — callback другого префикса."""
+    """Список тарифов в режиме подарка — callback другого префикса.
+    WL-тариф в подарок не продаётся (специфика — только для allowlist-региона получателя)."""
     rows: list[list[InlineKeyboardButton]] = []
     for t in TARIFFS:
+        if t.allowlist_exit:
+            continue
         prefix = "⭐ " if t.featured else ""
         suffix = f"  {t.badge}" if t.badge else ""
         rows.append(

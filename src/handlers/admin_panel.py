@@ -481,14 +481,14 @@ async def cb_extend_pick(cq: CallbackQuery, db: DB) -> None:
 
 
 @router.callback_query(F.data.startswith("adm:ex2:"))
-async def cb_extend_apply(cq: CallbackQuery, db: DB, xui: XUIClient, bot: Bot) -> None:
+async def cb_extend_apply(cq: CallbackQuery, db: DB, xui: XUIClient, bot: Bot, xui_wl: XUIClient | None = None) -> None:
     _, _, sub_id, days = cq.data.split(":")
     sub = await db.get_subscription(int(sub_id))
     if not sub:
         await cq.answer("Подписка не найдена", show_alert=True)
         return
     try:
-        updated = await extend_subscription(db, xui, sub, int(days))
+        updated = await extend_subscription(db, xui, sub, int(days), xui_wl=xui_wl)
     except Exception as e:
         log.exception("extend failed")
         await cq.answer(f"Ошибка: {e}", show_alert=True)
@@ -510,13 +510,13 @@ async def cb_extend_apply(cq: CallbackQuery, db: DB, xui: XUIClient, bot: Bot) -
 # ---------- ❌ Revoke / ➕ Grant из карточки ----------
 
 @router.callback_query(F.data.startswith("adm:rev:"))
-async def cb_revoke_from_card(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
+async def cb_revoke_from_card(cq: CallbackQuery, db: DB, xui: XUIClient, xui_wl: XUIClient | None = None) -> None:
     tg_id = int(cq.data.split(":")[2])
     sub = await db.get_active_user_subscription(tg_id)
     if not sub:
         await cq.answer("Активной подписки нет", show_alert=True)
         return
-    await deactivate_subscription(db, xui, sub)
+    await deactivate_subscription(db, xui, sub, xui_wl=xui_wl)
     await cq.answer(f"Отозвана #{sub.id}", show_alert=True)
     # Перерисуем карточку
     await _show_user_card(cq.message, tg_id, db, xui, edit=True)
@@ -533,7 +533,7 @@ async def cb_grant_from_card(cq: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("adm:gr2:"))
-async def cb_grant_apply(cq: CallbackQuery, db: DB, xui: XUIClient, bot: Bot) -> None:
+async def cb_grant_apply(cq: CallbackQuery, db: DB, xui: XUIClient, bot: Bot, xui_wl: XUIClient | None = None) -> None:
     _, _, tg_id, code = cq.data.split(":")
     tg_id = int(tg_id)
     tariff = get_tariff(code)
@@ -542,7 +542,7 @@ async def cb_grant_apply(cq: CallbackQuery, db: DB, xui: XUIClient, bot: Bot) ->
         return
     await db.upsert_user(tg_id=tg_id, username=None, first_name=None)
     try:
-        sub, link = await activate_subscription(db, xui, tg_id, tariff)
+        sub, link = await activate_subscription(db, xui, tg_id, tariff, xui_wl=xui_wl)
     except Exception as e:
         log.exception("admin grant failed")
         await cq.answer(f"Ошибка: {e}", show_alert=True)
@@ -557,7 +557,7 @@ async def cb_grant_apply(cq: CallbackQuery, db: DB, xui: XUIClient, bot: Bot) ->
         )
     except Exception:
         pass
-    await process_referral_after_activation(db, xui, bot, tg_id)
+    await process_referral_after_activation(db, xui, bot, tg_id, xui_wl=xui_wl)
     await cq.message.edit_text(
         f"✅ Выдана подписка #{sub.id} юзеру <code>{tg_id}</code>: {tariff.title}\n\nКлюч:\n<code>{link}</code>",
         reply_markup=admin_back_kb(),
@@ -630,7 +630,7 @@ async def gift_pick_user(msg: Message, state: FSMContext, db: DB) -> None:
 
 @router.message(StateFilter(AdminStates.gifting_days))
 async def gift_pick_days(
-    msg: Message, state: FSMContext, db: DB, xui: XUIClient, bot: Bot
+    msg: Message, state: FSMContext, db: DB, xui: XUIClient, bot: Bot, xui_wl: XUIClient | None = None
 ) -> None:
     parts = (msg.text or "").strip().split()
     if not parts or not parts[0].isdigit():
@@ -654,7 +654,7 @@ async def gift_pick_days(
 
     try:
         sub, link = await activate_gift_subscription(
-            db, xui, target_id, days=days, traffic_gb=traffic_gb
+            db, xui, target_id, days=days, traffic_gb=traffic_gb, xui_wl=xui_wl
         )
     except Exception as e:
         log.exception("gift failed")
@@ -670,7 +670,7 @@ async def gift_pick_days(
         status="manual",
     )
     # триггер реферального бонуса для пригласившего (если этот gift — первая активация)
-    await process_referral_after_activation(db, xui, bot, target_id)
+    await process_referral_after_activation(db, xui, bot, target_id, xui_wl=xui_wl)
 
     traffic_label = "без лимита" if traffic_gb == 0 else f"{traffic_gb} GB"
     # Сообщение получателю

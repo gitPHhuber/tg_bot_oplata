@@ -20,19 +20,36 @@ from .xui_client import XUIClient, days_from_now_unix_ms
 log = logging.getLogger(__name__)
 
 
+def _is_wl(tariff: Tariff | None) -> bool:
+    """Тариф для allowlist-регионов (отдельная 3x-ui панель на relay)."""
+    return bool(tariff and tariff.allowlist_exit and settings.wl_configured)
+
+
 def _inbound_for_tariff(tariff: Tariff | None) -> int:
-    """Выбор inbound на relay по тарифу.
-    Pro с whitelist=True → xui_inbound_id_pro (split-tunnel на РФ-домены).
-    Всё остальное (std, trial, gift, legacy) → основной xui_inbound_id.
-    Если pro-inbound не настроен — fallback на основной."""
+    """Выбор inbound по тарифу В СООТВЕТСТВУЮЩЕЙ панели.
+    - allowlist_exit=True → xui_wl_inbound_id (на relay-панели).
+    - whitelist=True (Pro split-tunnel) → xui_inbound_id_pro.
+    - остальное → основной xui_inbound_id."""
+    if _is_wl(tariff):
+        return settings.xui_wl_inbound_id
     if tariff and tariff.whitelist and settings.xui_inbound_id_pro:
         return settings.xui_inbound_id_pro
     return settings.xui_inbound_id
 
 
+def _xui_for_tariff(
+    tariff: Tariff | None, xui: XUIClient, xui_wl: XUIClient | None
+) -> XUIClient:
+    """Выбор 3x-ui клиента: для WL-тарифа — relay-панель, иначе основной."""
+    if _is_wl(tariff) and xui_wl is not None:
+        return xui_wl
+    return xui
+
+
 def _atlas_inbound_ids() -> list[int]:
     """Все inbound, в которых живут наши клиенты (основной + pro если задан).
-    Нужен для админки — стат/подписки собираем со всех."""
+    Нужен для админки — стат/подписки собираем со всех.
+    WL-inbound сюда не включается: он на другой панели, агрегируется отдельно."""
     ids = [settings.xui_inbound_id]
     if settings.xui_inbound_id_pro and settings.xui_inbound_id_pro != settings.xui_inbound_id:
         ids.append(settings.xui_inbound_id_pro)
@@ -57,6 +74,7 @@ async def activate_gift_subscription(
     tg_id: int,
     days: int,
     traffic_gb: int = 0,
+    xui_wl: XUIClient | None = None,
 ) -> tuple[Subscription, str]:
     """Подарок: подписка на N дней без привязки к существующему тарифу.
     Tariff_code сохраняется как 'gift_<days>d', чтобы потом отличать в статистике.
@@ -68,7 +86,7 @@ async def activate_gift_subscription(
         days=days,
         traffic_gb=traffic_gb,
     )
-    return await activate_subscription(db, xui, tg_id, gift)
+    return await activate_subscription(db, xui, tg_id, gift, xui_wl=xui_wl)
 
 
 async def activate_subscription(
@@ -76,8 +94,10 @@ async def activate_subscription(
     xui: XUIClient,
     tg_id: int,
     tariff: Tariff,
+    xui_wl: XUIClient | None = None,
 ) -> tuple[Subscription, str]:
-    """Создать клиента в 3x-ui + запись в БД. Возвращает (subscription, vless-link)."""
+    """Создать клиента в 3x-ui + запись в БД. Возвращает (subscription, vless-link).
+    Для WL-тарифов используется xui_wl (другая панель, relay)."""
     # уникальный email = идентификатор клиента в xray
     email = f"tg-{tg_id}-{uuid_lib.uuid4().hex[:8]}"
     # токен для https-subscription URL (Happ one-tap). Отдельный от UUID
@@ -86,8 +106,10 @@ async def activate_subscription(
 
     expiry_ms = days_from_now_unix_ms(tariff.days)
     inbound_id = _inbound_for_tariff(tariff)
+    is_wl = _is_wl(tariff)
+    target_xui = _xui_for_tariff(tariff, xui, xui_wl)
 
-    client_uuid = await xui.add_client(
+    client_uuid = await target_xui.add_client(
         inbound_id=inbound_id,
         email=email,
         total_gb=tariff.traffic_gb,
@@ -110,8 +132,11 @@ async def activate_subscription(
     assert sub is not None
     if tariff.code == "trial_50":
         await db.mark_trial_used(tg_id)
-    link = build_primary_link(sub_token, client_uuid, remark=f"Atlas-{tariff.code}")
-    log.info("activated sub %s for tg=%s tariff=%s", db_sub_id, tg_id, tariff.code)
+    link = build_primary_link(sub_token, client_uuid, remark=f"Atlas-{tariff.code}", wl=is_wl)
+    log.info(
+        "activated sub %s for tg=%s tariff=%s inbound=%s wl=%s",
+        db_sub_id, tg_id, tariff.code, inbound_id, is_wl,
+    )
     return sub, link
 
 
@@ -119,11 +144,14 @@ async def deactivate_subscription(
     db: DB,
     xui: XUIClient,
     sub: Subscription,
+    xui_wl: XUIClient | None = None,
 ) -> None:
     """Удалить клиента в 3x-ui и пометить подписку неактивной."""
-    inbound_id = _inbound_for_tariff(get_tariff(sub.tariff_code))
+    tariff = get_tariff(sub.tariff_code)
+    inbound_id = _inbound_for_tariff(tariff)
+    target_xui = _xui_for_tariff(tariff, xui, xui_wl)
     try:
-        await xui.delete_client(inbound_id, sub.xui_uuid)
+        await target_xui.delete_client(inbound_id, sub.xui_uuid)
     except Exception as e:
         log.warning("xui delete_client failed for sub %s: %s", sub.id, e)
     await db.deactivate_subscription(sub.id)
@@ -134,6 +162,7 @@ async def award_referral_bonus(
     xui: XUIClient,
     referrer_id: int,
     days: int,
+    xui_wl: XUIClient | None = None,
 ) -> tuple[Subscription, bool, str]:
     """Начислить реферреру бонус: продлить активную подписку на N дней,
     или создать новую gift-подписку (без лимита трафика).
@@ -144,10 +173,12 @@ async def award_referral_bonus(
     """
     sub = await db.get_active_user_subscription(referrer_id)
     if sub and not sub.is_expired:
-        updated = await extend_subscription(db, xui, sub, days)
+        updated = await extend_subscription(db, xui, sub, days, xui_wl=xui_wl)
         return updated, True, ""
+    # Реферальный бонус всегда создаём в основном inbound (gift-подписка,
+    # не тариф «обход белых списков»).
     new_sub, link = await activate_gift_subscription(
-        db, xui, referrer_id, days=days, traffic_gb=0
+        db, xui, referrer_id, days=days, traffic_gb=0, xui_wl=xui_wl
     )
     return new_sub, False, link
 
@@ -157,6 +188,7 @@ async def process_referral_after_activation(
     xui: XUIClient,
     bot,  # aiogram.Bot — прямой импорт здесь не делаем, чтобы избежать циклов
     new_user_tg_id: int,
+    xui_wl: XUIClient | None = None,
 ) -> None:
     """Вызывать ПОСЛЕ db.create_payment() при первой активации.
     Проверяет, есть ли у нового юзера referrer, и если да — начисляет бонус.
@@ -186,7 +218,7 @@ async def process_referral_after_activation(
 
     days = settings.referral_bonus_days
     try:
-        sub, extended, link = await award_referral_bonus(db, xui, referrer_id, days)
+        sub, extended, link = await award_referral_bonus(db, xui, referrer_id, days, xui_wl=xui_wl)
     except Exception as e:
         log.warning("referral bonus for %s failed: %s", referrer_id, e)
         return
@@ -214,6 +246,7 @@ async def extend_subscription(
     xui: XUIClient,
     sub: Subscription,
     extra_days: int,
+    xui_wl: XUIClient | None = None,
 ) -> Subscription:
     """Продлить подписку на N дней. Если истекла — отсчёт от сейчас, иначе от текущей expires."""
     now = datetime.now(timezone.utc)
@@ -225,7 +258,8 @@ async def extend_subscription(
     t = get_tariff(sub.tariff_code)
     limit_ip = t.limit_ip if t else 3
     inbound_id = _inbound_for_tariff(t)
-    await xui.update_client(
+    target_xui = _xui_for_tariff(t, xui, xui_wl)
+    await target_xui.update_client(
         inbound_id=inbound_id,
         client_uuid=sub.xui_uuid,
         email=sub.xui_email,

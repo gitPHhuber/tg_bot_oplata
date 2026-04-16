@@ -75,8 +75,10 @@ async def _build_profile_view(tg_id: int, db: DB, xui: XUIClient) -> tuple[str, 
         total_str = "♾"
 
     dl = days_left(sub.expires_at)
-    link = build_primary_link(sub.sub_id, sub.xui_uuid, remark=f"Atlas-{sub.tariff_code}")
-    tap_link = await build_tap_link(sub.sub_id) or link
+    sub_tariff = get_tariff(sub.tariff_code)
+    is_wl = bool(sub_tariff and sub_tariff.allowlist_exit)
+    link = build_primary_link(sub.sub_id, sub.xui_uuid, remark=f"Atlas-{sub.tariff_code}", wl=is_wl)
+    tap_link = await build_tap_link(sub.sub_id, wl=is_wl) or link
     used_str = "⚠️ данные временно недоступны" if traffic_unavailable else format_bytes(used_bytes)
     text = messages.PROFILE_ACTIVE.format(
         tariff_title=_tariff_title(sub.tariff_code),

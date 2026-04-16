@@ -28,6 +28,17 @@ class Settings(BaseSettings):
     xui_inbound_id_pro: int = 0
     xui_verify_ssl: bool = True
 
+    # ----- Whitelist-bypass inbound (отдельная 3x-ui панель на relay) -----
+    # Тариф «🛡 Обход белых списков» создаёт клиентов в этом inbound'е.
+    # Пусто → тариф недоступен, кнопка не показывается.
+    # Reality dest=pimg.mycdn.me (CDN Одноклассников в белом списке ТСПУ).
+    xui_wl_url: str = ""
+    xui_wl_path: str = ""
+    xui_wl_user: str = ""
+    xui_wl_pass: str = ""
+    xui_wl_inbound_id: int = 0
+    xui_wl_verify_ssl: bool = False
+
     # VLESS link template
     vless_host: str
     vless_port: int = 443
@@ -40,6 +51,28 @@ class Settings(BaseSettings):
     vless_sni: str = "www.microsoft.com"
     vless_flow: str = "xtls-rprx-vision"
     vless_fp: str = "chrome"
+
+    # ----- VLESS link для WL-тарифа (собирается когда нет sub-сервера) -----
+    vless_wl_host: str = ""
+    vless_wl_port: int = 8447
+    vless_wl_pubkey: str = ""
+    vless_wl_short_id: str = ""
+    vless_wl_sni: str = "pimg.mycdn.me"
+    vless_wl_fp: str = "ios"
+
+    # Публичный subscription-endpoint для WL-клиентов (если sub-сервер на
+    # relay-панели поднят отдельно). Пусто → будет выдаваться raw vless://.
+    sub_wl_base_url: str = ""
+
+    @property
+    def wl_configured(self) -> bool:
+        """True если WL-inbound полностью настроен и тариф можно продавать."""
+        return bool(
+            self.xui_wl_url and self.xui_wl_path and self.xui_wl_user
+            and self.xui_wl_pass and self.xui_wl_inbound_id
+            and self.vless_wl_host and self.vless_wl_pubkey
+            and self.vless_wl_short_id
+        )
 
     # Публичный endpoint 3x-ui subscription-server (e.g. https://176-108-242-105.nip.io/sub/).
     # Если задан — бот выдаёт клиенту https-подписку + Happ-deeplink.
