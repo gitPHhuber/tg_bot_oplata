@@ -60,15 +60,14 @@ async def cmd_start(
     is_admin = settings.is_admin(msg.from_user.id)
     trial_ok = await db.is_trial_available(msg.from_user.id)
 
-    # Reply-клавиатура — только для админа (юзеры идут чисто через inline)
+    # Reply-клавиатура только для админа — первым сообщением, чтобы внизу
+    # появились быстрые кнопки админки. Юзеры её не видят, им пусто.
     if is_admin:
-        await msg.answer(messages.WELCOME, reply_markup=admin_reply_kb())
-    else:
-        await msg.answer(messages.WELCOME)
+        await msg.answer("🛠 Админ-меню подгружено", reply_markup=admin_reply_kb())
 
-    # Inline главное меню — основной интерфейс
+    # WELCOME + inline-меню одним сообщением — главный интерфейс
     await msg.answer(
-        "Выбери действие 👇",
+        messages.WELCOME,
         reply_markup=main_inline_kb(
             channel_url=settings.channel_url,
             show_trial=trial_ok,

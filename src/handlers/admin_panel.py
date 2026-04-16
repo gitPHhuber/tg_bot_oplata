@@ -46,6 +46,7 @@ from ..services import (
     format_dt_human,
     format_traffic,
     format_used,
+    get_all_client_stats,
     process_referral_after_activation,
 )
 from ..tariffs import TARIFFS, get_tariff
@@ -131,7 +132,7 @@ async def menu_admin_subs(msg: Message, db: DB, xui: XUIClient) -> None:
     total = await db.count_active_subscriptions()
     total_pages = max((total + SUBS_PER_PAGE - 1) // SUBS_PER_PAGE, 1)
     subs = await db.list_active_subscriptions(SUBS_PER_PAGE, 0)
-    stats = await xui.get_inbound_client_stats(settings.xui_inbound_id)
+    stats = await get_all_client_stats(xui)
     by_email = {s.get("email"): s for s in stats}
     if not subs:
         txt = "🔐 <b>Активные подписки</b>\n\nПусто."
@@ -362,7 +363,7 @@ async def _show_user_card(target: Message, tg_id: int, db: DB, xui: XUIClient, e
     if active_subs:
         lines.append("")
         # Один запрос вместо N
-        all_stats = await xui.get_inbound_client_stats(settings.xui_inbound_id)
+        all_stats = await get_all_client_stats(xui)
         stats_by_email = {s.get("email"): s for s in all_stats}
         for s in active_subs[:5]:
             cs = stats_by_email.get(s.xui_email) or {}
@@ -396,7 +397,7 @@ async def cb_subs(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
     subs = await db.list_active_subscriptions(SUBS_PER_PAGE, page * SUBS_PER_PAGE)
 
     # Один запрос за всеми клиентами с трафиком
-    stats = await xui.get_inbound_client_stats(settings.xui_inbound_id)
+    stats = await get_all_client_stats(xui)
     by_email = {s.get("email"): s for s in stats}
 
     if not subs:

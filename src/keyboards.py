@@ -144,12 +144,17 @@ def main_inline_kb(
     rows.append(
         [InlineKeyboardButton(text="🤝 Реферальная программа", callback_data="m:ref")]
     )
+    rows.append(
+        [
+            InlineKeyboardButton(text="💬 Поддержка", callback_data="m:support"),
+            InlineKeyboardButton(text="🆘 Помощь",    callback_data="m:help"),
+        ]
+    )
     third_row: list[InlineKeyboardButton] = []
     if channel_url:
         third_row.append(InlineKeyboardButton(text="🌟 Наш канал", url=channel_url))
     third_row.append(InlineKeyboardButton(text="ℹ️ О нас", callback_data="m:about"))
     rows.append(third_row)
-    rows.append([InlineKeyboardButton(text="🆘 Помощь", callback_data="m:help")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

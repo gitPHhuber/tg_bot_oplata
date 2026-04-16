@@ -22,11 +22,19 @@ class Settings(BaseSettings):
     xui_user: str
     xui_pass: str
     xui_inbound_id: int
+    # Отдельный inbound для Pro-тарифов со split-tunnel (РФ-домены идут
+    # direct outbound на relay, минуя exit). 0 = не настроен, Pro-клиенты
+    # будут создаваться в основном inbound (без split-tunnel).
+    xui_inbound_id_pro: int = 0
     xui_verify_ssl: bool = True
 
     # VLESS link template
     vless_host: str
     vless_port: int = 443
+    # Порт Pro-inbound на relay (split-tunnel). 0 = используем vless_port.
+    # Нужен только для fallback-VLESS link; в subscription-URL 3x-ui сам
+    # подставляет правильный порт по inbound клиента.
+    vless_port_pro: int = 0
     vless_pubkey: str
     vless_short_id: str
     vless_sni: str = "www.microsoft.com"
@@ -60,7 +68,6 @@ class Settings(BaseSettings):
         "🔥 <b>Что даёт Atlas?</b>\n\n"
         "• Стабильная скорость соединения без искусственных ограничений\n"
         "• Современные протоколы передачи данных с шифрованием\n"
-        "• Поддержка одновременной работы с банковскими приложениями и Госуслугами РФ\n"
         "• Подключение до 10 устройств с одной подписки\n"
         "• Работает на смартфоне, ноутбуке, планшете и телевизоре\n"
         "• Круглосуточная поддержка в чате\n\n"

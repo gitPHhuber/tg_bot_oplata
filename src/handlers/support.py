@@ -15,7 +15,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from .. import messages
 from ..config import settings
@@ -33,6 +33,13 @@ class SupportStates(StatesGroup):
 async def support_entry(msg: Message, state: FSMContext) -> None:
     await state.set_state(SupportStates.waiting)
     await msg.answer(messages.SUPPORT_PROMPT)
+
+
+@router.callback_query(F.data == "m:support")
+async def cb_support_entry(cq: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(SupportStates.waiting)
+    await cq.message.answer(messages.SUPPORT_PROMPT)
+    await cq.answer()
 
 
 @router.message(StateFilter(SupportStates.waiting), Command("cancel"))
@@ -60,7 +67,7 @@ async def support_relay_to_admins(
     delivered = 0
     for admin_id in settings.admin_id_set:
         try:
-            await bot.send_message(admin_id, header)
+            header_msg = await bot.send_message(admin_id, header)
             # Копия исходного сообщения (текст/фото/voice/что угодно).
             # copy_message сохраняет содержимое, но "обнуляет" автора —
             # это нам и нужно (важно сохранить anonymity полностью).
@@ -69,9 +76,16 @@ async def support_relay_to_admins(
                 from_chat_id=msg.chat.id,
                 message_id=msg.message_id,
             )
+            # Сохраняем маппинг и для копии тела, и для заголовка — админ
+            # может сделать reply на любое из двух сообщений.
             await db.save_support_thread(
                 admin_chat_id=admin_id,
                 admin_msg_id=copied.message_id,
+                user_tg_id=user.id,
+            )
+            await db.save_support_thread(
+                admin_chat_id=admin_id,
+                admin_msg_id=header_msg.message_id,
                 user_tg_id=user.id,
             )
             delivered += 1
@@ -100,6 +114,10 @@ def _is_admin_private_reply(msg: Message) -> bool:
 
 @router.message(F.func(_is_admin_private_reply))
 async def admin_reply_to_user(msg: Message, db: DB, bot: Bot) -> None:
+    log.info(
+        "support: admin %s reply to msg=%s",
+        msg.from_user.id, msg.reply_to_message.message_id,
+    )
     user_tg_id = await db.find_support_user(
         admin_chat_id=msg.chat.id,
         admin_msg_id=msg.reply_to_message.message_id,
@@ -107,6 +125,7 @@ async def admin_reply_to_user(msg: Message, db: DB, bot: Bot) -> None:
     if user_tg_id is None:
         # Не наш тред — игнорим, а не отвечаем "не нашёл", чтобы не мешать
         # админу обычно общаться с reply вне поддержки.
+        log.info("support: no mapping for msg=%s, skip", msg.reply_to_message.message_id)
         return
 
     text = msg.text or msg.caption or ""

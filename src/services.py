@@ -20,6 +20,37 @@ from .xui_client import XUIClient, days_from_now_unix_ms
 log = logging.getLogger(__name__)
 
 
+def _inbound_for_tariff(tariff: Tariff | None) -> int:
+    """Выбор inbound на relay по тарифу.
+    Pro с whitelist=True → xui_inbound_id_pro (split-tunnel на РФ-домены).
+    Всё остальное (std, trial, gift, legacy) → основной xui_inbound_id.
+    Если pro-inbound не настроен — fallback на основной."""
+    if tariff and tariff.whitelist and settings.xui_inbound_id_pro:
+        return settings.xui_inbound_id_pro
+    return settings.xui_inbound_id
+
+
+def _atlas_inbound_ids() -> list[int]:
+    """Все inbound, в которых живут наши клиенты (основной + pro если задан).
+    Нужен для админки — стат/подписки собираем со всех."""
+    ids = [settings.xui_inbound_id]
+    if settings.xui_inbound_id_pro and settings.xui_inbound_id_pro != settings.xui_inbound_id:
+        ids.append(settings.xui_inbound_id_pro)
+    return ids
+
+
+async def get_all_client_stats(xui: "XUIClient") -> list[dict]:
+    """Слитый clientStats со всех наших inbound (main + pro).
+    Админка использует email как ключ, дубликатов между inbound нет."""
+    result: list[dict] = []
+    for ib_id in _atlas_inbound_ids():
+        try:
+            result.extend(await xui.get_inbound_client_stats(ib_id) or [])
+        except Exception as e:
+            log.warning("get_inbound_client_stats(%s) failed: %s", ib_id, e)
+    return result
+
+
 async def activate_gift_subscription(
     db: DB,
     xui: XUIClient,
@@ -54,9 +85,10 @@ async def activate_subscription(
     sub_token = uuid_lib.uuid4().hex[:16]
 
     expiry_ms = days_from_now_unix_ms(tariff.days)
+    inbound_id = _inbound_for_tariff(tariff)
 
     client_uuid = await xui.add_client(
-        inbound_id=settings.xui_inbound_id,
+        inbound_id=inbound_id,
         email=email,
         total_gb=tariff.traffic_gb,
         expiry_unix_ms=expiry_ms,
@@ -89,8 +121,9 @@ async def deactivate_subscription(
     sub: Subscription,
 ) -> None:
     """Удалить клиента в 3x-ui и пометить подписку неактивной."""
+    inbound_id = _inbound_for_tariff(get_tariff(sub.tariff_code))
     try:
-        await xui.delete_client(settings.xui_inbound_id, sub.xui_uuid)
+        await xui.delete_client(inbound_id, sub.xui_uuid)
     except Exception as e:
         log.warning("xui delete_client failed for sub %s: %s", sub.id, e)
     await db.deactivate_subscription(sub.id)
@@ -191,8 +224,9 @@ async def extend_subscription(
 
     t = get_tariff(sub.tariff_code)
     limit_ip = t.limit_ip if t else 3
+    inbound_id = _inbound_for_tariff(t)
     await xui.update_client(
-        inbound_id=settings.xui_inbound_id,
+        inbound_id=inbound_id,
         client_uuid=sub.xui_uuid,
         email=sub.xui_email,
         total_gb=sub.traffic_gb,
