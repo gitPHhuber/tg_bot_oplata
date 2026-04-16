@@ -14,7 +14,7 @@ from ..ui import (
     progress_bar,
     status_emoji_for_days,
 )
-from ..vless_link import build_primary_link
+from ..vless_link import build_primary_link, build_tap_link
 from ..xui_client import XUIClient
 
 router = Router(name="profile")
@@ -29,9 +29,11 @@ def _tariff_title(code: str) -> str:
     return code
 
 
-async def _build_profile_view(tg_id: int, db: DB, xui: XUIClient) -> tuple[str, str | None, bool]:
-    """Возвращает (text, vless_link, has_active_sub).
-    vless_link нужен для callback'а копирования и QR."""
+async def _build_profile_view(tg_id: int, db: DB, xui: XUIClient) -> tuple[str, str | None, str | None, bool]:
+    """Возвращает (text, raw_link, tap_link, has_active_sub).
+    raw_link — HTTPS sub-URL (для p:copy/QR и fallback копипаста в Happ).
+    tap_link — landing connect.html URL, открывает Happ на мобилке одним тапом.
+    В text уже подставлен tap_link (если доступен), чтобы тап по ссылке шёл в Happ."""
     sub = await db.get_active_user_subscription(tg_id)
 
     # История подписок (последние 5)
@@ -55,7 +57,7 @@ async def _build_profile_view(tg_id: int, db: DB, xui: XUIClient) -> tuple[str, 
         text = messages.PROFILE_NONE
         if all_subs:
             text += "\n\n<b>📜 История</b>\n" + history_str
-        return text, None, False
+        return text, None, None, False
 
     # Трафик из xui (best-effort)
     used_bytes = 0
@@ -74,6 +76,7 @@ async def _build_profile_view(tg_id: int, db: DB, xui: XUIClient) -> tuple[str, 
 
     dl = days_left(sub.expires_at)
     link = build_primary_link(sub.sub_id, sub.xui_uuid, remark=f"Atlas-{sub.tariff_code}")
+    tap_link = build_tap_link(sub.sub_id) or link
     used_str = "⚠️ данные временно недоступны" if traffic_unavailable else format_bytes(used_bytes)
     text = messages.PROFILE_ACTIVE.format(
         tariff_title=_tariff_title(sub.tariff_code),
@@ -84,15 +87,15 @@ async def _build_profile_view(tg_id: int, db: DB, xui: XUIClient) -> tuple[str, 
         total_str=total_str,
         progress_bar=bar,
         history=history_str,
-        link=link,
+        link=tap_link,
     )
-    return text, link, True
+    return text, link, tap_link, True
 
 
 @router.callback_query(F.data == "m:profile")
 async def cb_show_profile(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
-    text, link, has_active = await _build_profile_view(cq.from_user.id, db, xui)
-    kb = profile_kb(has_active_sub=has_active, sub_link=link if has_active else "")
+    text, link, tap_link, has_active = await _build_profile_view(cq.from_user.id, db, xui)
+    kb = profile_kb(has_active_sub=has_active, sub_link=tap_link if has_active else "")
     try:
         await cq.message.edit_text(text, reply_markup=kb)
     except Exception:
@@ -103,15 +106,15 @@ async def cb_show_profile(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
 # Старый текстовый триггер (на случай если юзер пришёл с reply-кнопки)
 @router.message(F.text == messages.MENU_PROFILE)
 async def show_profile(msg: Message, db: DB, xui: XUIClient) -> None:
-    text, link, has_active = await _build_profile_view(msg.from_user.id, db, xui)
-    await msg.answer(text, reply_markup=profile_kb(has_active_sub=has_active, sub_link=link if has_active else ""))
+    text, link, tap_link, has_active = await _build_profile_view(msg.from_user.id, db, xui)
+    await msg.answer(text, reply_markup=profile_kb(has_active_sub=has_active, sub_link=tap_link if has_active else ""))
 
 
 @router.callback_query(F.data == "p:copy")
 async def cb_copy_key(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
     """Отправляем ключ отдельным сообщением без форматирования —
     в TG на мобиле такое сообщение копируется целиком одним тапом."""
-    _text, link, has_active = await _build_profile_view(cq.from_user.id, db, xui)
+    _text, link, _tap, has_active = await _build_profile_view(cq.from_user.id, db, xui)
     if not has_active or not link:
         await cq.answer("Нет активной подписки", show_alert=True)
         return
@@ -121,7 +124,7 @@ async def cb_copy_key(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
 
 @router.callback_query(F.data == "p:qr")
 async def cb_qr_key(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
-    _text, link, has_active = await _build_profile_view(cq.from_user.id, db, xui)
+    _text, link, _tap, has_active = await _build_profile_view(cq.from_user.id, db, xui)
     if not has_active or not link:
         await cq.answer("Нет активной подписки", show_alert=True)
         return

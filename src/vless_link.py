@@ -47,3 +47,19 @@ def build_primary_link(sub_id: str, client_uuid: str, remark: str = "Atlas") -> 
     (one-tap через Happ), иначе — классическая vless://."""
     link = build_sub_link(sub_id)
     return link or build_vless_link(client_uuid, remark=remark)
+
+
+def build_tap_link(sub_id: str) -> str:
+    """One-tap landing: URL для кнопок в Telegram, который открывает Happ
+    на мобилке через промежуточный HTTPS-редирект (connect.html на relay).
+    Telegram принимает только http/https в inline-кнопках, поэтому нужен
+    HTTPS-wrapper над happ://add?url=<sub>. Если SUB_TAP_BASE_URL не
+    настроен — fallback на raw sub URL."""
+    sub = build_sub_link(sub_id)
+    if not sub:
+        return ""
+    base = (settings.sub_tap_base_url or "").strip()
+    if not base:
+        return sub
+    happ = f"happ://add?url={quote(sub, safe='')}"
+    return f"{base}?d={quote(happ, safe='')}"

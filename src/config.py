@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     # Если пуст — fallback на классический vless:// (без one-tap Happ).
     sub_base_url: str = ""
 
+    # HTTPS-landing для one-tap открытия в Happ из Telegram-кнопки
+    # (connect.html на relay, принимает ?d=<url-encoded-happ-link>, делает JS-редирект).
+    # Если пуст — кнопка «Активировать профиль» ведёт прямо на sub-URL
+    # (откроет 3x-ui инфо-страницу в браузере, а не Happ).
+    sub_tap_base_url: str = ""
+
     # Payments
     payment_mode: str = "manual"  # manual | yookassa
     yookassa_shop_id: str = ""
