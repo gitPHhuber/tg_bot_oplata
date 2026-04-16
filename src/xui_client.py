@@ -129,13 +129,18 @@ class XUIClient:
         email: str,
         total_gb: int,
         expiry_unix_ms: int,
-        flow: str = "xtls-rprx-vision",
+        flow: str = "",
         limit_ip: int = 2,
         sub_id: str = "",
     ) -> str:
         """Добавить клиента в существующий VLESS-инбаунд. Возвращает UUID.
         sub_id — токен для subscription-URL (Happ one-tap). Пусто = клиент
-        без sub-URL, только vless://."""
+        без sub-URL, только vless://.
+
+        flow="" (default) для chain relay→exit: на inbound клиента Vision
+        НЕ нужен (payload ломается Happ'ом при двойном Vision). Vision
+        остаётся только в outbound to-exit, там он нужен для user2 на
+        exit-сервере. Исторически стоял vision — убрано 2026-04-16."""
         async with self._client_lock:
             client_uuid = str(uuid_lib.uuid4())
             total_bytes = 0 if total_gb <= 0 else total_gb * 1024 * 1024 * 1024
@@ -184,7 +189,7 @@ class XUIClient:
         total_gb: int,
         expiry_unix_ms: int,
         enable: bool = True,
-        flow: str = "xtls-rprx-vision",
+        flow: str = "",
         limit_ip: int = 2,
         sub_id: str = "",
     ) -> None:
