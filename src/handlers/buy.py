@@ -302,7 +302,7 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                         expires=format_dt_human(sub.expires_at),
                         link=link,
                     ),
-                    reply_markup=install_kb(build_tap_link(sub.sub_id) or link),
+                    reply_markup=install_kb(await build_tap_link(sub.sub_id) or link),
                 )
             except Exception as e:
                 log.warning("notify gift recipient %s failed: %s", payment.recipient_tg_id, e)
@@ -320,7 +320,7 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                     expires=format_dt_human(sub.expires_at),
                     link=link,
                 ),
-                reply_markup=install_kb(build_tap_link(sub.sub_id) or link),
+                reply_markup=install_kb(await build_tap_link(sub.sub_id) or link),
             )
         await process_referral_after_activation(db, xui, bot, beneficiary_id)
         return
