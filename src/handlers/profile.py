@@ -1,16 +1,15 @@
 from aiogram import F, Router
-from aiogram.types import BufferedInputFile, CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message
 
 from .. import messages
 from ..db import DB
-from ..keyboards import main_inline_back_kb, profile_kb
+from ..keyboards import profile_kb
 from ..services import format_dt_human
 from ..tariffs import get_tariff
 from ..ui import (
     days_left,
     days_left_str,
     format_bytes,
-    make_qr_png,
     progress_bar,
     status_emoji_for_days,
 )
@@ -112,41 +111,3 @@ async def show_profile(msg: Message, db: DB, xui: XUIClient) -> None:
     await msg.answer(text, reply_markup=profile_kb(has_active_sub=has_active, sub_link=tap_link if has_active else ""))
 
 
-@router.callback_query(F.data == "p:copy")
-async def cb_copy_key(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
-    """Отправляем ключ отдельным сообщением без форматирования —
-    в TG на мобиле такое сообщение копируется целиком одним тапом."""
-    _text, link, _tap, has_active = await _build_profile_view(cq.from_user.id, db, xui)
-    if not has_active or not link:
-        await cq.answer("Нет активной подписки", show_alert=True)
-        return
-    await cq.message.answer(link, parse_mode=None)
-    await cq.answer("Ключ отправлен ниже — нажми на него, чтобы скопировать")
-
-
-@router.callback_query(F.data == "p:qr")
-async def cb_qr_key(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
-    _text, link, _tap, has_active = await _build_profile_view(cq.from_user.id, db, xui)
-    if not has_active or not link:
-        await cq.answer("Нет активной подписки", show_alert=True)
-        return
-    png = make_qr_png(link)
-    photo = BufferedInputFile(png, filename="atlas-key.png")
-    await cq.message.answer_photo(
-        photo=photo,
-        caption=(
-            "📲 <b>QR-код твоего ключа</b>\n\n"
-            "<b>iPhone:</b>\n"
-            "• <b>Streisand</b> (бесплатно) → «+» → «QR-код»\n"
-            "• <b>Shadowrocket</b> → сканер в левом верхнем углу\n"
-            "• <b>Hiddify</b> → «+» → «Сканировать QR»\n\n"
-            "<b>Android:</b>\n"
-            "• <b>Hiddify</b> → «+» → «Сканировать QR»\n"
-            "• <b>v2rayNG</b> → «+» → «Импорт из QR-кода»\n"
-            "• <b>NekoBox</b> → «+» → «QR-код»\n\n"
-            "<b>ПК / ноутбук:</b>\n"
-            "• Отсканируй QR камерой телефона с экрана ноутбука"
-        ),
-        reply_markup=main_inline_back_kb(),
-    )
-    await cq.answer()

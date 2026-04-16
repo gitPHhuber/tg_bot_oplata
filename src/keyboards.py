@@ -187,7 +187,7 @@ def gift_tariffs_kb() -> InlineKeyboardMarkup:
 
 def profile_kb(has_active_sub: bool, sub_link: str = "") -> InlineKeyboardMarkup:
     """Действия в карточке моей подписки.
-    sub_link (HTTPS subscription URL) — добавляет 3 кнопки one-tap импорта в Happ."""
+    sub_link (HTTPS subscription URL) — добавляет кнопку one-tap импорта в Happ."""
     rows: list[list[InlineKeyboardButton]] = []
     if has_active_sub:
         if sub_link:
@@ -200,12 +200,6 @@ def profile_kb(has_active_sub: bool, sub_link: str = "") -> InlineKeyboardMarkup
             rows.append(
                 [InlineKeyboardButton(text="🔗 Активировать профиль", url=sub_link)]
             )
-        rows.append(
-            [
-                InlineKeyboardButton(text="📋 Скопировать ключ", callback_data="p:copy"),
-                InlineKeyboardButton(text="📲 QR-код",            callback_data="p:qr"),
-            ]
-        )
         rows.append(
             [InlineKeyboardButton(text="➕ Продлить", callback_data="m:buy")]
         )

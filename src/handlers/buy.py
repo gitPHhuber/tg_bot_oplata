@@ -287,6 +287,7 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
         # Очищаем промо из state — повторное использование одним юзером невозможно
         await state.update_data(promo_code=None, promo_kind=None, promo_value=None, promo_id=None)
 
+        tap_link = await build_tap_link(sub.sub_id, wl=tariff.allowlist_exit) or link
         if payment.recipient_tg_id:
             # gift flow: получателю шлём ключ, покупателю — подтверждение
             buyer = await db.get_user(cq.from_user.id)
@@ -302,8 +303,9 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                         tariff_title=tariff.title,
                         expires=format_dt_human(sub.expires_at),
                         link=link,
+                        tap_link=tap_link,
                     ),
-                    reply_markup=install_kb(await build_tap_link(sub.sub_id, wl=tariff.allowlist_exit) or link),
+                    reply_markup=install_kb(tap_link),
                 )
             except Exception as e:
                 log.warning("notify gift recipient %s failed: %s", payment.recipient_tg_id, e)
@@ -320,8 +322,9 @@ async def on_check_click(cq: CallbackQuery, state: FSMContext, db: DB, xui: XUIC
                     tariff_title=tariff.title,
                     expires=format_dt_human(sub.expires_at),
                     link=link,
+                    tap_link=tap_link,
                 ),
-                reply_markup=install_kb(await build_tap_link(sub.sub_id, wl=tariff.allowlist_exit) or link),
+                reply_markup=install_kb(tap_link),
             )
         await process_referral_after_activation(db, xui, bot, beneficiary_id, xui_wl=xui_wl)
         return

@@ -70,6 +70,7 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot, xui_wl: XUICli
                 except Exception:
                     pass
 
+            tap_link = await build_tap_link(sub.sub_id, wl=tariff.allowlist_exit) or link
             if p.recipient_tg_id:
                 # Это gift: уведомляем покупателя и получателя отдельно
                 buyer = await db.get_user(p.tg_id)
@@ -85,8 +86,9 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot, xui_wl: XUICli
                             tariff_title=tariff.title,
                             expires=format_dt_human(sub.expires_at),
                             link=link,
+                            tap_link=tap_link,
                         ),
-                        reply_markup=install_kb(await build_tap_link(sub.sub_id, wl=tariff.allowlist_exit) or link),
+                        reply_markup=install_kb(tap_link),
                     )
                 except Exception as e:
                     log.warning("notify gift recipient %s failed: %s", p.recipient_tg_id, e)
@@ -109,8 +111,9 @@ async def poll_pending_payments(db: DB, xui: XUIClient, bot: Bot, xui_wl: XUICli
                             tariff_title=tariff.title,
                             expires=format_dt_human(sub.expires_at),
                             link=link,
+                            tap_link=tap_link,
                         ),
-                        reply_markup=install_kb(await build_tap_link(sub.sub_id, wl=tariff.allowlist_exit) or link),
+                        reply_markup=install_kb(tap_link),
                     )
                 except Exception as e:
                     log.warning("notify user %s failed: %s", p.tg_id, e)
