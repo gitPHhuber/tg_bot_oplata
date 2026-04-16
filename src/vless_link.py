@@ -51,15 +51,19 @@ def build_primary_link(sub_id: str, client_uuid: str, remark: str = "Atlas") -> 
 
 def build_tap_link(sub_id: str) -> str:
     """One-tap landing: URL для кнопок в Telegram, который открывает Happ
-    на мобилке через промежуточный HTTPS-редирект (connect.html на relay).
-    Telegram принимает только http/https в inline-кнопках, поэтому нужен
-    HTTPS-wrapper над happ://add?url=<sub>. Если SUB_TAP_BASE_URL не
-    настроен — fallback на raw sub URL."""
+    на мобилке через HTTPS-редирект на relay. Формат URL зависит от того,
+    куда указывает SUB_TAP_BASE_URL:
+      • activate.html?sub=<hex>   — наша простая landing (plain sub_id)
+      • connect.html?d=<encoded>  — универсальный redirector от прошлого Клода
+    Если base пуст — fallback на raw sub URL (откроет 3x-ui инфо-страницу)."""
     sub = build_sub_link(sub_id)
     if not sub:
         return ""
     base = (settings.sub_tap_base_url or "").strip()
     if not base:
         return sub
+    if "activate.html" in base:
+        return f"{base}?sub={sub_id}"
+    # legacy connect.html — двойной encoding для JS decodeURIComponent
     happ = f"happ://add?url={quote(sub, safe='')}"
     return f"{base}?d={quote(happ, safe='')}"
