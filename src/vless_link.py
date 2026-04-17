@@ -19,7 +19,7 @@ _CRYPT_TTL = 24 * 3600
 _crypt_cache: dict[str, tuple[str, float]] = {}
 
 
-def build_vless_link(client_uuid: str, remark: str = "VPN") -> str:
+def build_vless_link(client_uuid: str, remark: str = "Atlas") -> str:
     params = (
         f"type=tcp"
         f"&security=reality"
