@@ -1,4 +1,5 @@
 from aiogram import F, Router
+from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
 from .. import messages
@@ -107,6 +108,12 @@ async def cb_show_profile(cq: CallbackQuery, db: DB, xui: XUIClient) -> None:
 # Старый текстовый триггер (на случай если юзер пришёл с reply-кнопки)
 @router.message(F.text == messages.MENU_PROFILE)
 async def show_profile(msg: Message, db: DB, xui: XUIClient) -> None:
+    text, link, tap_link, has_active = await _build_profile_view(msg.from_user.id, db, xui)
+    await msg.answer(text, reply_markup=profile_kb(has_active_sub=has_active, sub_link=tap_link if has_active else ""))
+
+
+@router.message(Command("profile"))
+async def cmd_profile(msg: Message, db: DB, xui: XUIClient) -> None:
     text, link, tap_link, has_active = await _build_profile_view(msg.from_user.id, db, xui)
     await msg.answer(text, reply_markup=profile_kb(has_active_sub=has_active, sub_link=tap_link if has_active else ""))
 

@@ -170,13 +170,8 @@ async def cmd_buy(msg: Message) -> None:
     )
 
 
-@router.message(Command("profile"))
-async def cmd_profile(msg: Message) -> None:
-    await msg.answer(
-        "🔐 Открой главное меню и нажми «Моя подписка».\n"
-        "Или просто отправь /start.",
-        reply_markup=main_inline_back_kb(),
-    )
+# /profile-команда обрабатывается в handlers/profile.py, чтобы показать
+# реальный профиль, а не заглушку с редиректом в меню.
 
 
 # ----- старые reply-кнопки (оставлены, чтобы работало и текстом) -----
