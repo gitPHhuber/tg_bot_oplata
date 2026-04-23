@@ -40,11 +40,10 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
 
 def tariffs_kb(promo_label: str | None = None) -> InlineKeyboardMarkup:
     """Список тарифов. badge подсвечивает featured. Кнопка промо снизу.
-    Тариф с allowlist_exit=True скрывается если WL-inbound не настроен."""
-    from .config import settings
+    Специальные тарифы не показываются в публичной витрине покупки."""
     rows: list[list[InlineKeyboardButton]] = []
     for t in TARIFFS:
-        if t.allowlist_exit and not settings.wl_configured:
+        if t.allowlist_exit:
             continue
         prefix = "⭐ " if t.featured else ""
         suffix = f"  {t.badge}" if t.badge else ""
@@ -127,11 +126,11 @@ def main_inline_kb(
     show_trial: bool = False,
 ) -> InlineKeyboardMarkup:
     """Главное inline-меню в стиле «бренд». Показывается под /start.
-    show_trial=True показывает большую кнопку «🎣 Проба · 3 дня за 49₽»."""
+    show_trial=True показывает большую кнопку «🎁 Тестовые 3 дня за 49₽»."""
     rows: list[list[InlineKeyboardButton]] = []
     if show_trial:
         rows.append(
-            [InlineKeyboardButton(text="🎣 Проба · 3 дня за 49₽", callback_data="buy:trial_50")]
+            [InlineKeyboardButton(text="🎁 Тестовые 3 дня за 49₽", callback_data="buy:trial_50")]
         )
     rows.append(
         [InlineKeyboardButton(text="🛒 Купить подписку", callback_data="m:buy")]
@@ -222,9 +221,7 @@ def main_inline_back_kb() -> InlineKeyboardMarkup:
 
 
 def about_kb() -> InlineKeyboardMarkup:
-    """Экран «О нас»: кнопки оферты и возврата.
-    Если задан settings.offer_url — оферта открывается внешней ссылкой
-    (teletype и т.п.); иначе — inline callback на старый текст."""
+    """Экран «О нас»: публичные документы и возвраты."""
     from .config import settings
     if settings.offer_url:
         offer_btn = InlineKeyboardButton(text="📄 Договор оферты", url=settings.offer_url)
@@ -233,6 +230,9 @@ def about_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [offer_btn],
+            [InlineKeyboardButton(text="↩️ Политика возвратов", url=settings.refund_url)],
+            [InlineKeyboardButton(text="🔒 Политика конфиденциальности", url=settings.privacy_url)],
+            [InlineKeyboardButton(text="🏷 Реквизиты продавца", url=settings.requisites_url)],
             [InlineKeyboardButton(text="◀️ Назад", callback_data="m:home")],
         ]
     )
