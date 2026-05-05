@@ -19,7 +19,7 @@ _CRYPT_TTL = 24 * 3600
 _crypt_cache: dict[str, tuple[str, float]] = {}
 
 
-def build_vless_link(client_uuid: str, remark: str = "Atlas") -> str:
+def build_vless_link(client_uuid: str, remark: str = "Atlas Connect") -> str:
     params = (
         f"type=tcp"
         f"&security=reality"
@@ -36,7 +36,7 @@ def build_vless_link(client_uuid: str, remark: str = "Atlas") -> str:
     )
 
 
-def build_vless_link_wl(client_uuid: str, remark: str = "Atlas-WL") -> str:
+def build_vless_link_wl(client_uuid: str, remark: str = "Atlas Connect · WL") -> str:
     """VLESS-link для WL-inbound (relay с dest=pimg.mycdn.me).
     Используется когда sub_wl_base_url не задан."""
     params = (
@@ -73,7 +73,7 @@ def build_happ_deeplink(sub_link: str) -> str:
 
 
 def build_primary_link(
-    sub_id: str, client_uuid: str, remark: str = "Atlas", wl: bool = False
+    sub_id: str, client_uuid: str, remark: str = "Atlas Connect", wl: bool = False
 ) -> str:
     """Основная ссылка для показа юзеру (fallback-копипаст). HTTPS-sub если
     доступна, иначе классическая vless://.

@@ -95,15 +95,15 @@ class Settings(BaseSettings):
 
     # Brand / контент главного меню
     channel_url: str = ""           # пустой → кнопка «Наш канал» скрыта
-    public_base_url: str = "https://atlasnumberone.netlify.app"
-    offer_url: str = "https://atlasnumberone.netlify.app/terms"
-    privacy_url: str = "https://atlasnumberone.netlify.app/privacy"
-    refund_url: str = "https://atlasnumberone.netlify.app/refund"
-    requisites_url: str = "https://atlasnumberone.netlify.app/requisites"
+    public_base_url: str = "https://connect.atlas-go.pro"
+    offer_url: str = "https://connect.atlas-go.pro/terms/"
+    privacy_url: str = "https://connect.atlas-go.pro/privacy/"
+    refund_url: str = "https://connect.atlas-go.pro/refund/"
+    requisites_url: str = "https://connect.atlas-go.pro/requisites/"
     about_text: str = (
-        "<b>Atlas</b> — цифровой сервис защищённого подключения для "
-        "повседневного использования.\n\n"
-        "🔥 <b>Что даёт Atlas?</b>\n\n"
+        "<b>Atlas Connect</b> — цифровой сервис защищённого подключения "
+        "для повседневного использования.\n\n"
+        "🔥 <b>Что даёт Atlas Connect?</b>\n\n"
         "• Доступ к сервису на оплаченный срок\n"
         "• Поддерживаемые профили подключения через Happ\n"
         "• Подключение до 10 устройств с одной подписки\n"
@@ -114,7 +114,7 @@ class Settings(BaseSettings):
     )
     offer_text: str = (
         "<b>Договор-оферта на оказание услуг</b>\n\n"
-        "Актуальная редакция оферты опубликована на сайте Atlas и применяется "
+        "Актуальная редакция оферты опубликована на сайте Atlas Connect и применяется "
         "к новым заказам с даты публикации.\n\n"
         "<b>1. Предмет оферты</b>\n"
         "Исполнитель предоставляет Пользователю на возмездной основе доступ к "
