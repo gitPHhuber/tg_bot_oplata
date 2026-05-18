@@ -232,7 +232,8 @@ def about_kb() -> InlineKeyboardMarkup:
             [offer_btn],
             [InlineKeyboardButton(text="↩️ Политика возвратов", url=settings.refund_url)],
             [InlineKeyboardButton(text="🔒 Политика конфиденциальности", url=settings.privacy_url)],
-            [InlineKeyboardButton(text="🏷 Реквизиты продавца", url=settings.requisites_url)],
+            # Кнопка «Реквизиты продавца» скрыта на время согласования с банком —
+            # url=settings.requisites_url можно вернуть отдельной строкой после.
             [InlineKeyboardButton(text="◀️ Назад", callback_data="m:home")],
         ]
     )
